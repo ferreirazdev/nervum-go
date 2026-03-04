@@ -3,6 +3,7 @@ package database
 import (
 	"log"
 
+	"github.com/nervum/nervum-go/internal/features/auth"
 	"github.com/nervum/nervum-go/internal/features/environments"
 	"github.com/nervum/nervum-go/internal/features/entities"
 	"github.com/nervum/nervum-go/internal/features/organizations"
@@ -16,6 +17,7 @@ func AutoMigrate(db *gorm.DB) error {
 	if err := db.AutoMigrate(
 		&organization.Organization{},
 		&user.User{},
+		&auth.Session{},
 		&environment.Environment{},
 		&entity.Entity{},
 		&relationship.Relationship{},

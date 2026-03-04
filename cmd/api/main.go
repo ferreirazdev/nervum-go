@@ -4,10 +4,13 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/nervum/nervum-go/internal/config"
 	"github.com/nervum/nervum-go/internal/database"
+	"github.com/nervum/nervum-go/internal/features/auth"
 	"github.com/nervum/nervum-go/internal/features/environments"
 	"github.com/nervum/nervum-go/internal/features/entities"
 	"github.com/nervum/nervum-go/internal/features/organizations"
@@ -27,15 +30,36 @@ func main() {
 	}
 
 	r := gin.Default()
+
+	r.Use(cors.New(cors.Config{
+		AllowOrigins:     []string{"http://localhost:5173"},
+		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowHeaders:     []string{"Origin", "Content-Type", "Accept"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		MaxAge:           12 * time.Hour,
+	}))
+
 	r.GET("/health", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"status": "ok"}) })
 
+	userRepo := user.NewRepository(db)
+	sessionRepo := auth.NewSessionRepository(db)
+	requireAuth := auth.RequireAuth(sessionRepo, userRepo)
+
 	api := r.Group("/api/v1")
-	organization.NewHandler(organization.NewRepository(db)).Register(api)
-	user.NewHandler(user.NewRepository(db)).Register(api)
-	environment.NewHandler(environment.NewRepository(db)).Register(api)
-	entity.NewHandler(entity.NewRepository(db)).Register(api)
-	relationship.NewHandler(relationship.NewRepository(db)).Register(api)
-	userenvironmentaccess.NewHandler(userenvironmentaccess.NewRepository(db)).Register(api)
+
+	// Public auth routes
+	auth.NewHandler(sessionRepo, userRepo).Register(api)
+
+	// Protected routes
+	protected := api.Group("")
+	protected.Use(requireAuth)
+	organization.NewHandler(organization.NewRepository(db)).Register(protected)
+	user.NewHandler(userRepo).Register(protected)
+	environment.NewHandler(environment.NewRepository(db)).Register(protected)
+	entity.NewHandler(entity.NewRepository(db)).Register(protected)
+	relationship.NewHandler(relationship.NewRepository(db)).Register(protected)
+	userenvironmentaccess.NewHandler(userenvironmentaccess.NewRepository(db)).Register(protected)
 
 	addr := ":" + fmt.Sprint(cfg.Server.Port)
 	log.Printf("listening on %s", addr)
