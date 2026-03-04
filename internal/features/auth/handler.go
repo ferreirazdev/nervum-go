@@ -7,6 +7,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	organization "github.com/nervum/nervum-go/internal/features/organizations"
 	user "github.com/nervum/nervum-go/internal/features/users"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
@@ -20,10 +21,11 @@ const (
 type Handler struct {
 	sessionRepo SessionRepository
 	userRepo    user.Repository
+	orgRepo     organization.Repository
 }
 
-func NewHandler(sessionRepo SessionRepository, userRepo user.Repository) *Handler {
-	return &Handler{sessionRepo: sessionRepo, userRepo: userRepo}
+func NewHandler(sessionRepo SessionRepository, userRepo user.Repository, orgRepo organization.Repository) *Handler {
+	return &Handler{sessionRepo: sessionRepo, userRepo: userRepo, orgRepo: orgRepo}
 }
 
 func (h *Handler) Register(r *gin.RouterGroup) {
@@ -47,7 +49,6 @@ func (h *Handler) RegisterUser(c *gin.Context) {
 		return
 	}
 
-	// Check if email already exists
 	existing, err := h.userRepo.GetByEmail(c.Request.Context(), req.Email)
 	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
@@ -64,12 +65,21 @@ func (h *Handler) RegisterUser(c *gin.Context) {
 		return
 	}
 
+	// Auto-create a personal organization for the new user
+	org := &organization.Organization{Name: req.Name + "'s Organization"}
+	if err := h.orgRepo.Create(c.Request.Context(), org); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+
+	orgID := org.ID
 	u := &user.User{
-		ID:           uuid.New(),
-		Email:        req.Email,
-		Name:         req.Name,
-		Role:         user.RoleMember,
-		PasswordHash: string(hash),
+		ID:             uuid.New(),
+		Email:          req.Email,
+		Name:           req.Name,
+		Role:           user.RoleAdmin,
+		OrganizationID: &orgID,
+		PasswordHash:   string(hash),
 	}
 	if err := h.userRepo.Create(c.Request.Context(), u); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
@@ -103,7 +113,6 @@ func (h *Handler) Login(c *gin.Context) {
 
 	u, err := h.userRepo.GetByEmail(c.Request.Context(), req.Email)
 	if err != nil {
-		// Return same error for not-found and wrong password to avoid user enumeration
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "invalid credentials"})
 		return
 	}

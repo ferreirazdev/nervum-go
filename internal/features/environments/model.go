@@ -10,7 +10,9 @@ import (
 type Environment struct {
 	ID             uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
 	OrganizationID uuid.UUID      `gorm:"type:uuid;not null;index" json:"organization_id"`
-	Name           string         `gorm:"type:text" json:"name"` // prod, staging, dev
+	Name           string         `gorm:"type:text" json:"name"`
+	Description    string         `gorm:"type:text" json:"description"`
+	Status         string         `gorm:"type:text" json:"status"` // healthy, warning, critical
 	CreatedAt      time.Time      `json:"created_at"`
 	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
 

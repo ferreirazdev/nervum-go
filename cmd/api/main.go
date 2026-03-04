@@ -43,21 +43,23 @@ func main() {
 	r.GET("/health", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"status": "ok"}) })
 
 	userRepo := user.NewRepository(db)
+	orgRepo := organization.NewRepository(db)
+	entityRepo := entity.NewRepository(db)
 	sessionRepo := auth.NewSessionRepository(db)
 	requireAuth := auth.RequireAuth(sessionRepo, userRepo)
 
 	api := r.Group("/api/v1")
 
 	// Public auth routes
-	auth.NewHandler(sessionRepo, userRepo).Register(api)
+	auth.NewHandler(sessionRepo, userRepo, orgRepo).Register(api)
 
 	// Protected routes
 	protected := api.Group("")
 	protected.Use(requireAuth)
-	organization.NewHandler(organization.NewRepository(db)).Register(protected)
+	organization.NewHandler(orgRepo).Register(protected)
 	user.NewHandler(userRepo).Register(protected)
-	environment.NewHandler(environment.NewRepository(db)).Register(protected)
-	entity.NewHandler(entity.NewRepository(db)).Register(protected)
+	environment.NewHandler(environment.NewRepository(db), entityRepo).Register(protected)
+	entity.NewHandler(entityRepo).Register(protected)
 	relationship.NewHandler(relationship.NewRepository(db)).Register(protected)
 	userenvironmentaccess.NewHandler(userenvironmentaccess.NewRepository(db)).Register(protected)
 

@@ -71,17 +71,30 @@ func (h *Handler) Update(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
-	var req Organization
+	o, err := h.repo.GetByID(c.Request.Context(), id)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	var req struct {
+		Name *string `json:"name"`
+	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	req.ID = id
-	if err := h.repo.Update(c.Request.Context(), &req); err != nil {
+	if req.Name != nil {
+		o.Name = *req.Name
+	}
+	if err := h.repo.Update(c.Request.Context(), o); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, req)
+	c.JSON(http.StatusOK, o)
 }
 
 func (h *Handler) Delete(c *gin.Context) {

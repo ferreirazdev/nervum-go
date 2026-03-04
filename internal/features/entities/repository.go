@@ -11,6 +11,7 @@ type Repository interface {
 	Create(ctx context.Context, e *Entity) error
 	GetByID(ctx context.Context, id uuid.UUID) (*Entity, error)
 	ListByOrganization(ctx context.Context, orgID uuid.UUID, envID *uuid.UUID) ([]Entity, error)
+	CountByEnvironment(ctx context.Context, envID uuid.UUID) (int64, error)
 	Update(ctx context.Context, e *Entity) error
 	Delete(ctx context.Context, id uuid.UUID) error
 }
@@ -48,6 +49,12 @@ func (r *repository) ListByOrganization(ctx context.Context, orgID uuid.UUID, en
 
 func (r *repository) Update(ctx context.Context, e *Entity) error {
 	return r.db.WithContext(ctx).Save(e).Error
+}
+
+func (r *repository) CountByEnvironment(ctx context.Context, envID uuid.UUID) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).Model(&Entity{}).Where("environment_id = ?", envID).Count(&count).Error
+	return count, err
 }
 
 func (r *repository) Delete(ctx context.Context, id uuid.UUID) error {

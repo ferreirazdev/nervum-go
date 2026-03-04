@@ -5,15 +5,22 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	entity "github.com/nervum/nervum-go/internal/features/entities"
 	"gorm.io/gorm"
 )
 
 type Handler struct {
-	repo Repository
+	repo       Repository
+	entityRepo entity.Repository
 }
 
-func NewHandler(repo Repository) *Handler {
-	return &Handler{repo: repo}
+func NewHandler(repo Repository, entityRepo entity.Repository) *Handler {
+	return &Handler{repo: repo, entityRepo: entityRepo}
+}
+
+type environmentResponse struct {
+	Environment
+	ServicesCount int64 `json:"services_count"`
 }
 
 func (h *Handler) Register(r *gin.RouterGroup) {
@@ -31,11 +38,14 @@ func (h *Handler) Create(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
+	if req.Status == "" {
+		req.Status = "healthy"
+	}
 	if err := h.repo.Create(c.Request.Context(), &req); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusCreated, req)
+	c.JSON(http.StatusCreated, environmentResponse{req, 0})
 }
 
 func (h *Handler) GetByID(c *gin.Context) {
@@ -53,7 +63,8 @@ func (h *Handler) GetByID(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, e)
+	count, _ := h.entityRepo.CountByEnvironment(c.Request.Context(), e.ID)
+	c.JSON(http.StatusOK, environmentResponse{*e, count})
 }
 
 func (h *Handler) List(c *gin.Context) {
@@ -72,7 +83,13 @@ func (h *Handler) List(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, list)
+	ctx := c.Request.Context()
+	response := make([]environmentResponse, len(list))
+	for i, env := range list {
+		count, _ := h.entityRepo.CountByEnvironment(ctx, env.ID)
+		response[i] = environmentResponse{env, count}
+	}
+	c.JSON(http.StatusOK, response)
 }
 
 func (h *Handler) Update(c *gin.Context) {
@@ -81,17 +98,39 @@ func (h *Handler) Update(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
-	var req Environment
+	e, err := h.repo.GetByID(c.Request.Context(), id)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	var req struct {
+		Name        *string `json:"name"`
+		Description *string `json:"description"`
+		Status      *string `json:"status"`
+	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
 	}
-	req.ID = id
-	if err := h.repo.Update(c.Request.Context(), &req); err != nil {
+	if req.Name != nil {
+		e.Name = *req.Name
+	}
+	if req.Description != nil {
+		e.Description = *req.Description
+	}
+	if req.Status != nil {
+		e.Status = *req.Status
+	}
+	if err := h.repo.Update(c.Request.Context(), e); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, req)
+	count, _ := h.entityRepo.CountByEnvironment(c.Request.Context(), e.ID)
+	c.JSON(http.StatusOK, environmentResponse{*e, count})
 }
 
 func (h *Handler) Delete(c *gin.Context) {
