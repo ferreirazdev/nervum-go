@@ -13,9 +13,12 @@ import (
 	"github.com/nervum/nervum-go/internal/features/auth"
 	"github.com/nervum/nervum-go/internal/features/environments"
 	"github.com/nervum/nervum-go/internal/features/entities"
+	"github.com/nervum/nervum-go/internal/features/invitations"
 	"github.com/nervum/nervum-go/internal/features/organizations"
 	"github.com/nervum/nervum-go/internal/features/relationships"
+	"github.com/nervum/nervum-go/internal/features/teams"
 	"github.com/nervum/nervum-go/internal/features/user_environment_access"
+	"github.com/nervum/nervum-go/internal/features/user_teams"
 	"github.com/nervum/nervum-go/internal/features/users"
 )
 
@@ -58,6 +61,15 @@ func main() {
 	protected.Use(requireAuth)
 	organization.NewHandler(orgRepo).Register(protected)
 	user.NewHandler(userRepo).Register(protected)
+	teamRepo := teams.NewRepository(db)
+	userTeamRepo := userteam.NewRepository(db)
+	teams.NewHandler(teamRepo, userTeamRepo).Register(protected)
+	userteam.NewHandler(userTeamRepo).Register(protected)
+	invitationRepo := invitation.NewRepository(db)
+	userEnvAccessRepo := userenvironmentaccess.NewRepository(db)
+	invHandler := invitation.NewHandler(invitationRepo, userRepo, orgRepo, userTeamRepo, userEnvAccessRepo, sessionRepo)
+	invHandler.Register(protected)
+	invHandler.RegisterPublic(api)
 	environment.NewHandler(environment.NewRepository(db), entityRepo).Register(protected)
 	entity.NewHandler(entityRepo).Register(protected)
 	relationship.NewHandler(relationship.NewRepository(db)).Register(protected)

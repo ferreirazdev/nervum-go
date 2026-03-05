@@ -12,6 +12,7 @@ type Repository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
 	List(ctx context.Context) ([]User, error)
+	ListByOrganization(ctx context.Context, orgID uuid.UUID) ([]User, error)
 	Update(ctx context.Context, u *User) error
 	Delete(ctx context.Context, id uuid.UUID) error
 }
@@ -49,6 +50,12 @@ func (r *repository) GetByEmail(ctx context.Context, email string) (*User, error
 func (r *repository) List(ctx context.Context) ([]User, error) {
 	var list []User
 	err := r.db.WithContext(ctx).Find(&list).Error
+	return list, err
+}
+
+func (r *repository) ListByOrganization(ctx context.Context, orgID uuid.UUID) ([]User, error) {
+	var list []User
+	err := r.db.WithContext(ctx).Where("organization_id = ?", orgID).Find(&list).Error
 	return list, err
 }
 

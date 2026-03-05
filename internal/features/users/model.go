@@ -8,15 +8,16 @@ import (
 )
 
 const (
-	RoleAdmin  = "admin"
-	RoleMember = "member"
+	RoleAdmin   = "admin"
+	RoleManager = "manager"
+	RoleMember  = "member"
 )
 
 type User struct {
 	ID             uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
 	Email          string         `gorm:"type:text;uniqueIndex" json:"email"`
 	Name           string         `gorm:"type:text" json:"name"`
-	Role           string         `gorm:"type:text" json:"role"` // admin, member
+	Role           string         `gorm:"type:text" json:"role"` // admin, manager, member
 	OrganizationID *uuid.UUID     `gorm:"type:uuid;index" json:"organization_id,omitempty"`
 	PasswordHash   string         `gorm:"type:text;not null" json:"-"`
 	CreatedAt      time.Time      `json:"created_at"`

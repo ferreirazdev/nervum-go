@@ -85,6 +85,11 @@ func (h *Handler) RegisterUser(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
+	org.OwnerID = &u.ID
+	if err := h.orgRepo.Update(c.Request.Context(), org); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
 
 	session := &Session{
 		UserID:    u.ID,

@@ -8,6 +8,8 @@ import (
 	"gorm.io/gorm"
 )
 
+const contextUserKey = "auth_user"
+
 type Handler struct {
 	repo Repository
 }
@@ -57,6 +59,35 @@ func (h *Handler) GetByID(c *gin.Context) {
 }
 
 func (h *Handler) List(c *gin.Context) {
+	orgIDStr := c.Query("organization_id")
+	if orgIDStr != "" {
+		orgID, err := uuid.Parse(orgIDStr)
+		if err != nil {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization_id"})
+			return
+		}
+		cu, ok := c.Get(contextUserKey)
+		if !ok {
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+			return
+		}
+		currentUser := cu.(*User)
+		if currentUser.OrganizationID == nil || *currentUser.OrganizationID != orgID {
+			c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+			return
+		}
+		if !CanListOrgMembers(currentUser.Role) {
+			c.JSON(http.StatusForbidden, gin.H{"error": "cannot list organization members"})
+			return
+		}
+		list, err := h.repo.ListByOrganization(c.Request.Context(), orgID)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusOK, list)
+		return
+	}
 	list, err := h.repo.List(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
@@ -71,6 +102,12 @@ func (h *Handler) Update(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
+	cu, ok := c.Get(contextUserKey)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
+	}
+	currentUser := cu.(*User)
 	u, err := h.repo.GetByID(c.Request.Context(), id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -81,8 +118,9 @@ func (h *Handler) Update(c *gin.Context) {
 		return
 	}
 	var req struct {
-		Name             *string    `json:"name"`
-		OrganizationID   *uuid.UUID `json:"organization_id"`
+		Name           *string    `json:"name"`
+		OrganizationID *uuid.UUID `json:"organization_id"`
+		Role           *string    `json:"role"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -93,6 +131,17 @@ func (h *Handler) Update(c *gin.Context) {
 	}
 	if req.OrganizationID != nil {
 		u.OrganizationID = req.OrganizationID
+	}
+	if req.Role != nil {
+		if currentUser.Role != RoleAdmin {
+			c.JSON(http.StatusForbidden, gin.H{"error": "only admin can change role"})
+			return
+		}
+		if *req.Role != RoleAdmin && *req.Role != RoleManager && *req.Role != RoleMember {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "invalid role"})
+			return
+		}
+		u.Role = *req.Role
 	}
 	if err := h.repo.Update(c.Request.Context(), u); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

@@ -6,8 +6,11 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	entity "github.com/nervum/nervum-go/internal/features/entities"
+	user "github.com/nervum/nervum-go/internal/features/users"
 	"gorm.io/gorm"
 )
+
+const contextUserKey = "auth_user"
 
 type Handler struct {
 	repo       Repository
@@ -33,9 +36,27 @@ func (h *Handler) Register(r *gin.RouterGroup) {
 }
 
 func (h *Handler) Create(c *gin.Context) {
+	u, ok := c.Get(contextUserKey)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
+	}
+	currentUser := u.(*user.User)
+	if currentUser.OrganizationID == nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "no organization"})
+		return
+	}
+	if !user.CanManageEnvironments(currentUser.Role) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "cannot manage environments"})
+		return
+	}
 	var req Environment
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if req.OrganizationID != *currentUser.OrganizationID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "organization mismatch"})
 		return
 	}
 	if req.Status == "" {
@@ -54,6 +75,16 @@ func (h *Handler) GetByID(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
+	u, ok := c.Get(contextUserKey)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
+	}
+	currentUser := u.(*user.User)
+	if currentUser.OrganizationID == nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "no organization"})
+		return
+	}
 	e, err := h.repo.GetByID(c.Request.Context(), id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -62,6 +93,17 @@ func (h *Handler) GetByID(c *gin.Context) {
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+	if e.OrganizationID != *currentUser.OrganizationID {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+		return
+	}
+	if !user.CanViewAllEnvironments(currentUser.Role) {
+		ok, err := h.repo.UserCanAccessEnvironment(c.Request.Context(), id, currentUser.ID)
+		if err != nil || !ok {
+			c.JSON(http.StatusForbidden, gin.H{"error": "cannot view this environment"})
+			return
+		}
 	}
 	count, _ := h.entityRepo.CountByEnvironment(c.Request.Context(), e.ID)
 	c.JSON(http.StatusOK, environmentResponse{*e, count})
@@ -78,7 +120,22 @@ func (h *Handler) List(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid organization_id"})
 		return
 	}
-	list, err := h.repo.ListByOrganization(c.Request.Context(), orgID)
+	u, ok := c.Get(contextUserKey)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
+	}
+	currentUser := u.(*user.User)
+	if currentUser.OrganizationID == nil || *currentUser.OrganizationID != orgID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
+		return
+	}
+	var list []Environment
+	if user.CanViewAllEnvironments(currentUser.Role) {
+		list, err = h.repo.ListByOrganization(c.Request.Context(), orgID)
+	} else {
+		list, err = h.repo.ListEnvironmentsForMember(c.Request.Context(), orgID, currentUser.ID)
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
@@ -98,6 +155,20 @@ func (h *Handler) Update(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
 		return
 	}
+	u, ok := c.Get(contextUserKey)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
+	}
+	currentUser := u.(*user.User)
+	if currentUser.OrganizationID == nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "no organization"})
+		return
+	}
+	if !user.CanManageEnvironments(currentUser.Role) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "cannot manage environments"})
+		return
+	}
 	e, err := h.repo.GetByID(c.Request.Context(), id)
 	if err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -105,6 +176,10 @@ func (h *Handler) Update(c *gin.Context) {
 			return
 		}
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	if e.OrganizationID != *currentUser.OrganizationID {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}
 	var req struct {
@@ -137,6 +212,25 @@ func (h *Handler) Delete(c *gin.Context) {
 	id, err := uuid.Parse(c.Param("id"))
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+	u, ok := c.Get(contextUserKey)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
+	}
+	currentUser := u.(*user.User)
+	if currentUser.OrganizationID == nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "no organization"})
+		return
+	}
+	if !user.CanManageEnvironments(currentUser.Role) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "cannot manage environments"})
+		return
+	}
+	e, err := h.repo.GetByID(c.Request.Context(), id)
+	if err == nil && e.OrganizationID != *currentUser.OrganizationID {
+		c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 		return
 	}
 	if err := h.repo.Delete(c.Request.Context(), id); err != nil {
