@@ -1,39 +1,59 @@
-# Nervum API (nervum-go)
+# Nervum – Environment Maps API (SaaS backend)
 
-Feature-oriented Go API for **Nervum** — software environment maps. Built with **GORM** and **Postgres**, focused on clear domain boundaries, testability, and a production-friendly layout. Pairs with [nervum-ui](https://github.com/nervum/nervum-ui) for the frontend.
+**Nervum** is a SaaS for visualizing and managing your software environments as a living map – services, databases, queues, and the relationships between them. This repository contains the **Go API** (`nervum-go`) that powers the product.
 
-Use this project as:
+The API is designed to be:
 
-- **Starter kit** for new Go APIs
-- **Reference implementation** of feature-first folder structure
-- **Playground** for experimenting with entities/relationships modeling
+- **Production-ready**: Postgres + GORM, env-based config, health checks
+- **Feature-oriented**: clear domain boundaries (organizations, environments, entities, relationships, access control)
+- **SaaS-friendly**: multi-organization support, user accounts, environment-level access
 
-## Tech stack
+It pairs with the React frontend in [`nervum-ui`](https://github.com/nervum/nervum-ui) to deliver the full SaaS experience.
+
+---
+
+## What Nervum does (SaaS overview)
+
+- **Environment maps**: visualize prod/staging/dev with nodes and relationships between services, databases, queues, third‑party systems, etc.
+- **Ownership & access**: attach owners/teams and roles to environments so the right people see the right maps.
+- **Change-friendly**: quickly add, edit, or retire entities and relationships as your architecture evolves.
+- **API-first**: everything in the UI is backed by this API, so you can integrate Nervum into your own workflows and automations.
+
+If you’re running Nervum as a SaaS:
+
+- This repo is the **backend service** you deploy (e.g. to Fly.io, Render, Kubernetes, or a simple VM) behind your public SaaS domain.
+- `nervum-ui` is the **public web app** your users interact with.
+
+---
+
+## Architecture (backend only)
 
 - **Language**: Go
 - **Database**: Postgres (SQLite in unit tests)
 - **ORM**: GORM
-- **HTTP**: Gin
-- **Architecture**: Feature-oriented, clean separation between config, database, and features
+- **HTTP framework**: Gin
+- **Layout**: feature-oriented `internal/features/*`
 
-## Project structure
+High-level layout:
 
 ```text
-cmd/api/                    # Entrypoint
+cmd/api/                    # Entrypoint (main service for the SaaS)
 internal/
-  config/                   # Env-based config
+  config/                   # Env-based config for SaaS deployments
   database/                 # GORM connection, migrations, test DB
   pkg/types/                # Shared types (e.g. JSONB)
   features/
-    organizations/          # model, repository, handler
-    users/
-    environments/
-    entities/
-    relationships/
-    user_environment_access/
+    organizations/          # Tenants / orgs
+    users/                  # Accounts
+    environments/           # Environments per org (prod/staging/dev...)
+    entities/               # Nodes in the environment map
+    relationships/          # Edges between entities
+    user_environment_access/# RBAC-style environment access
 ```
 
-## Getting started
+---
+
+## Running locally (SaaS-style dev setup)
 
 1. **Create a Postgres database**
 
@@ -45,7 +65,10 @@ internal/
 
    ```bash
    cp .env.example .env
-   # Edit .env: DB_HOST, DB_USER, DB_PASSWORD, DB_NAME, PORT
+   # Edit .env:
+   # DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
+   # PORT (default 8080)
+   # APP_ENV=local|staging|production
    ```
 
 3. **Install dependencies and run the API**
@@ -55,9 +78,18 @@ internal/
    go run ./cmd/api
    ```
 
-   The API is available at `http://localhost:8080/api/v1` (or the `PORT` set in `.env`).
+   The API will be available at `http://localhost:8080/api/v1` (or the `PORT` set in `.env`).
 
-## HTTP endpoints
+4. **Connect the SaaS UI**
+
+   - Clone and run [`nervum-ui`](https://github.com/nervum/nervum-ui).
+   - Point the UI’s base API URL (see its `README.md` or `.env`) at `http://localhost:8080/api/v1`.
+
+---
+
+## Core API surface
+
+These endpoints back the main SaaS features (exact routes may evolve over time; check the code for the latest definitions):
 
 - **Health**
   - `GET /health`
@@ -86,9 +118,27 @@ internal/
 - **User environment access**
   - `POST/GET/PUT/DELETE /api/v1/user-environment-access` (query: `user_id` or `environment_id`)
 
+---
+
+## Data model (high level)
+
+- **organizations** — id (UUID), name, timestamps
+- **users** — id, email (unique), name, role (admin/member), timestamps
+- **environments** — id, organization_id, name (prod/staging/dev), created_at
+- **entities** — id, organization_id, environment_id, type, name, status, owner_team_id, metadata (JSONB), timestamps
+- **relationships** — id, organization_id, from_entity_id, to_entity_id, type, metadata (JSONB), created_at
+- **user_environment_access** — id, user_id, environment_id, role, created_at; UNIQUE(user_id, environment_id)
+
+This structure lets you run Nervum as:
+
+- A **single-tenant internal tool** (one organization) or
+- A **multi-tenant SaaS** (multiple organizations with isolated data).
+
+---
+
 ## Testing
 
-- **Unit tests** (in-memory SQLite, no Postgres required):
+- **Unit tests** (SQLite in-memory, no Postgres required):
 
   ```bash
   go test ./internal/...
@@ -101,24 +151,37 @@ internal/
   go test -tags=integration ./internal/database/...
   ```
 
-## Data model (high level)
+---
 
-- **organizations** — id (UUID), name, timestamps
-- **users** — id, email (unique), name, role (admin/member), timestamps
-- **environments** — id, organization_id, name (prod/staging/dev), created_at
-- **entities** — id, organization_id, environment_id, type, name, status, owner_team_id, metadata (JSONB), timestamps
-- **relationships** — id, organization_id, from_entity_id, to_entity_id, type, metadata (JSONB), created_at
-- **user_environment_access** — id, user_id, environment_id, role, created_at; UNIQUE(user_id, environment_id)
+## Deploying as a SaaS backend
+
+You can deploy `nervum-go` like any Go HTTP API:
+
+- **Containerized**: build a Docker image and run on Fly.io, Render, Railway, ECS, or Kubernetes.
+- **Bare metal / VM**: compile a static binary and run behind Nginx or another reverse proxy.
+
+At minimum you’ll need to configure:
+
+- **DATABASE URL** (via `DB_*` env vars)
+- **APP_ENV** (e.g. `production`)
+- **PORT** and any **HTTP proxy / TLS** in front of the service
+
+Then point your hosted `nervum-ui` at the public API base URL.
+
+---
 
 ## Roadmap & design notes
 
-- **Roadmap**: see [ROADMAP.md](ROADMAP.md) for planned phases (RBAC, multi-tenant, graph APIs, caching, observability, etc.).
+- **Roadmap**: see [ROADMAP.md](ROADMAP.md) for planned phases (RBAC, multi-tenant hardening, graph APIs, caching, observability, etc.).
 - **Design notes**: see [posts.md](posts.md) for discussions on entities, relationships, and access control.
 
-## Related
-
-- **Frontend**: [nervum-ui](https://github.com/nervum/nervum-ui) — React/Vite app for environment maps and entities.
+---
 
 ## Contributing
 
-This repo is small, focused, and easy to understand. To adapt it as a starter, propose layout/testing/data-model improvements, or contribute back, open issues or PRs in your fork and iterate from there.
+This repo is intentionally small and focused. You can:
+
+- Adapt it as a **template** for your own SaaS backend.
+- Propose improvements to layout, testing, or data modeling.
+
+Feel free to open an issue or PR in your fork and iterate from there.
