@@ -80,6 +80,7 @@ func (h *Handler) Create(c *gin.Context) {
 		Email         string      `json:"email" binding:"required,email"`
 		TeamIDs       []uuid.UUID `json:"team_ids" binding:"required"`
 		EnvironmentID *uuid.UUID  `json:"environment_id"`
+		Role          *string     `json:"role"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -87,6 +88,18 @@ func (h *Handler) Create(c *gin.Context) {
 	}
 	if len(req.TeamIDs) == 0 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "at least one team required"})
+		return
+	}
+	role := user.RoleMember
+	if req.Role != nil && *req.Role != "" {
+		role = *req.Role
+	}
+	if role != user.RoleAdmin && role != user.RoleManager && role != user.RoleMember {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid role"})
+		return
+	}
+	if !user.CanAssignInviteRole(currentUser.Role, role) {
+		c.JSON(http.StatusForbidden, gin.H{"error": "cannot assign that role"})
 		return
 	}
 	token, err := generateToken()
@@ -99,6 +112,7 @@ func (h *Handler) Create(c *gin.Context) {
 		Email:          req.Email,
 		OrganizationID: *currentUser.OrganizationID,
 		InvitedByID:    currentUser.ID,
+		Role:           role,
 		EnvironmentID:  req.EnvironmentID,
 		ExpiresAt:      time.Now().Add(inviteExpiryDays * 24 * time.Hour),
 		Status:         StatusPending,
@@ -173,12 +187,13 @@ func (h *Handler) Delete(c *gin.Context) {
 }
 
 type inviteByTokenResponse struct {
-	Email          string      `json:"email"`
-	OrganizationID string      `json:"organization_id"`
+	Email            string    `json:"email"`
+	OrganizationID   string    `json:"organization_id"`
 	OrganizationName string    `json:"organization_name"`
-	TeamIDs        []string    `json:"team_ids"`
-	EnvironmentID  *string    `json:"environment_id,omitempty"`
-	ExpiresAt      time.Time   `json:"expires_at"`
+	TeamIDs          []string  `json:"team_ids"`
+	EnvironmentID    *string   `json:"environment_id,omitempty"`
+	Role             string    `json:"role"`
+	ExpiresAt        time.Time `json:"expires_at"`
 }
 
 func (h *Handler) GetByToken(c *gin.Context) {
@@ -218,7 +233,11 @@ func (h *Handler) GetByToken(c *gin.Context) {
 		OrganizationID:   inv.OrganizationID.String(),
 		OrganizationName: orgName,
 		TeamIDs:          teamIDs,
+		Role:             inv.Role,
 		ExpiresAt:        inv.ExpiresAt,
+	}
+	if inv.Role == "" {
+		resp.Role = user.RoleMember
 	}
 	if inv.EnvironmentID != nil {
 		s := inv.EnvironmentID.String()
@@ -314,10 +333,14 @@ func (h *Handler) Accept(c *gin.Context) {
 	if name == "" {
 		name = inv.Email
 	}
+	invRole := inv.Role
+	if invRole == "" {
+		invRole = user.RoleMember
+	}
 	newUser := &user.User{
 		Email:          inv.Email,
 		Name:           name,
-		Role:           user.RoleMember,
+		Role:           invRole,
 		OrganizationID: &inv.OrganizationID,
 		PasswordHash:   string(hash),
 	}
