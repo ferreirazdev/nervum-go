@@ -1,3 +1,4 @@
+// Package userenvironmentaccess provides CRUD for user-environment access (RBAC per environment).
 package userenvironmentaccess
 
 import (
@@ -7,6 +8,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// UserEnvironmentAccess grants a user access to an environment. Stored in user_environment_access.
 type UserEnvironmentAccess struct {
 	ID            uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
 	UserID        uuid.UUID      `gorm:"type:uuid;not null;uniqueIndex:idx_user_env" json:"user_id"`

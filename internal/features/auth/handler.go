@@ -18,12 +18,14 @@ const (
 	bcryptCost      = 12
 )
 
+// Handler handles auth HTTP routes: register, login, logout, and me (current user).
 type Handler struct {
 	sessionRepo SessionRepository
 	userRepo    user.Repository
 	orgRepo     organization.Repository
 }
 
+// NewHandler returns an auth Handler with the given session and user repositories.
 func NewHandler(sessionRepo SessionRepository, userRepo user.Repository, orgRepo organization.Repository) *Handler {
 	return &Handler{sessionRepo: sessionRepo, userRepo: userRepo, orgRepo: orgRepo}
 }

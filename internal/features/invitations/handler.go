@@ -23,6 +23,7 @@ const (
 	sessionDuration  = 7 * 24 * time.Hour
 )
 
+// Handler serves invitation routes: create, list, delete (protected) and get-by-token, accept (public).
 type Handler struct {
 	repo          Repository
 	userRepo      user.Repository
@@ -32,6 +33,7 @@ type Handler struct {
 	sessionRepo   auth.SessionRepository
 }
 
+// NewHandler returns an invitation Handler with the given repositories and session store.
 func NewHandler(
 	repo Repository,
 	userRepo user.Repository,

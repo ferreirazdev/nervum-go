@@ -8,10 +8,12 @@ import (
 	"gorm.io/gorm"
 )
 
+// Handler serves HTTP CRUD for user-environment access records.
 type Handler struct {
 	repo Repository
 }
 
+// NewHandler returns a user_environment_access Handler using the given repository.
 func NewHandler(repo Repository) *Handler {
 	return &Handler{repo: repo}
 }

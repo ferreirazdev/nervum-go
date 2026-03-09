@@ -7,6 +7,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// Repository persists teams and their environment links.
 type Repository interface {
 	Create(ctx context.Context, t *Team, environmentIDs []uuid.UUID) error
 	GetByID(ctx context.Context, id uuid.UUID) (*Team, error)
@@ -20,6 +21,7 @@ type repository struct {
 	db *gorm.DB
 }
 
+// NewRepository returns a teams Repository backed by the given DB.
 func NewRepository(db *gorm.DB) Repository {
 	return &repository{db: db}
 }

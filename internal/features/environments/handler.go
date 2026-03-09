@@ -12,11 +12,13 @@ import (
 
 const contextUserKey = "auth_user"
 
+// Handler serves HTTP CRUD for environments. List/get enforce org and optional env-level access.
 type Handler struct {
 	repo       Repository
 	entityRepo entity.Repository
 }
 
+// NewHandler returns an environment Handler with the given environment and entity repositories.
 func NewHandler(repo Repository, entityRepo entity.Repository) *Handler {
 	return &Handler{repo: repo, entityRepo: entityRepo}
 }

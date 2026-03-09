@@ -89,7 +89,9 @@ internal/
 
 ## Core API surface
 
-These endpoints back the main SaaS features (exact routes may evolve over time; check the code for the latest definitions):
+For full request/response schemas, status codes, and auth, see the [OpenAPI spec](openapi/openapi.yaml) and [openapi/README.md](openapi/README.md). Summary:
+
+These endpoints back the main SaaS features (exact routes may evolve over time; check the code or OpenAPI spec for the latest definitions):
 
 - **Health**
   - `GET /health`
@@ -170,6 +172,14 @@ Then point your hosted `nervum-ui` at the public API base URL.
 
 ---
 
+## Documentation
+
+- **API reference**: [openapi/openapi.yaml](openapi/openapi.yaml) – OpenAPI 3 spec for all routes, schemas, and auth. See [openapi/README.md](openapi/README.md) for how to view it (e.g. Swagger UI) or generate clients. Run `make openapi-serve` to serve Swagger UI locally (requires Docker).
+- **Architecture and contributing**: [docs/README.md](docs/README.md) – Index of architecture, contributing guide, and design notes.
+- **Package docs**: run `go doc ./internal/...` or `make docs` to browse godoc for the codebase.
+
+---
+
 ## Roadmap & design notes
 
 - **Roadmap**: see [ROADMAP.md](ROADMAP.md) for planned phases (RBAC, multi-tenant hardening, graph APIs, caching, observability, etc.).
@@ -179,7 +189,7 @@ Then point your hosted `nervum-ui` at the public API base URL.
 
 ## Contributing
 
-This repo is intentionally small and focused. You can:
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [docs/contributing.md](docs/contributing.md). You can:
 
 - Adapt it as a **template** for your own SaaS backend.
 - Propose improvements to layout, testing, or data modeling.

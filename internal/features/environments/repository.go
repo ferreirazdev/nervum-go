@@ -7,6 +7,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// Repository persists environments and supports org/member-scoped listing and access checks.
 type Repository interface {
 	Create(ctx context.Context, e *Environment) error
 	GetByID(ctx context.Context, id uuid.UUID) (*Environment, error)
@@ -21,6 +22,7 @@ type repository struct {
 	db *gorm.DB
 }
 
+// NewRepository returns an environment Repository backed by the given DB.
 func NewRepository(db *gorm.DB) Repository {
 	return &repository{db: db}
 }

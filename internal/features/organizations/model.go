@@ -1,3 +1,5 @@
+// Package organization provides CRUD for organizations (tenants). Used by the API server
+// for multi-tenant isolation; each user can own or belong to an organization.
 package organization
 
 import (
@@ -7,6 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// Organization represents a tenant in the system. Stored in table organizations.
 type Organization struct {
 	ID          uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
 	Name        string         `gorm:"type:text;not null" json:"name"`

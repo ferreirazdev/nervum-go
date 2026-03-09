@@ -1,3 +1,4 @@
+// Package entity provides CRUD for map nodes (services, databases, etc.) per organization and environment.
 package entity
 
 import (
@@ -24,6 +25,7 @@ const (
 	StatusCritical = "critical"
 )
 
+// Entity represents a node on the environment map (service, database, infra, etc.). Stored in table entities.
 type Entity struct {
 	ID             uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
 	OrganizationID uuid.UUID      `gorm:"type:uuid;not null;index" json:"organization_id"`

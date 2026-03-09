@@ -7,6 +7,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// Repository persists user-team memberships and lists by user or team.
 type Repository interface {
 	Create(ctx context.Context, ut *UserTeam) error
 	GetByUserAndTeam(ctx context.Context, userID, teamID uuid.UUID) (*UserTeam, error)
@@ -20,6 +21,7 @@ type repository struct {
 	db *gorm.DB
 }
 
+// NewRepository returns a user_teams Repository backed by the given DB.
 func NewRepository(db *gorm.DB) Repository {
 	return &repository{db: db}
 }

@@ -1,3 +1,5 @@
+// Package invitation provides invite-by-email flows: create invitation, get by token (public),
+// and accept (public). Accept creates or updates the user and adds them to teams/env access.
 package invitation
 
 import (
@@ -13,6 +15,7 @@ const (
 	StatusExpired  = "expired"
 )
 
+// Invitation represents a pending or accepted invite. Stored in table invitations.
 type Invitation struct {
 	ID             uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
 	Token          string         `gorm:"type:text;uniqueIndex;not null" json:"token"`

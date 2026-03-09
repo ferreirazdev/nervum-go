@@ -1,3 +1,5 @@
+// Package main runs the Nervum API server: config, database, migrations, Gin router,
+// and feature handlers. Used by the SaaS backend binary (cmd/api).
 package main
 
 import (
@@ -23,6 +25,7 @@ import (
 )
 
 func main() {
+	// Load config, connect DB, run migrations, register routes, and listen.
 	cfg := config.Load()
 	db, err := database.NewDB(&cfg.Database)
 	if err != nil {

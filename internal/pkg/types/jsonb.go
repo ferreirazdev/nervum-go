@@ -1,3 +1,4 @@
+// Package types provides shared types used across internal packages (e.g. JSONB for GORM).
 package types
 
 import (
@@ -6,6 +7,7 @@ import (
 	"errors"
 )
 
+// JSONB is a map type that implements driver.Valuer and sql.Scanner for GORM jsonb columns.
 type JSONB map[string]interface{}
 
 func (j JSONB) Value() (driver.Value, error) {

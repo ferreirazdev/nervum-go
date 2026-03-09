@@ -10,10 +10,12 @@ import (
 
 const contextUserKey = "auth_user"
 
+// Handler serves HTTP CRUD for users (create, list, get, update, delete).
 type Handler struct {
 	repo Repository
 }
 
+// NewHandler returns a user Handler using the given repository.
 func NewHandler(repo Repository) *Handler {
 	return &Handler{repo: repo}
 }

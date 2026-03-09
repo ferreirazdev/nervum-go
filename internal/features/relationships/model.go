@@ -1,3 +1,4 @@
+// Package relationship provides CRUD for edges between entities (depends_on, owned_by, etc.).
 package relationship
 
 import (
@@ -17,6 +18,7 @@ const (
 	TypeMonitoredBy   = "monitored_by"
 )
 
+// Relationship represents a directed edge between two entities. Stored in table relationships.
 type Relationship struct {
 	ID             uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
 	OrganizationID uuid.UUID      `gorm:"type:uuid;not null;index" json:"organization_id"`

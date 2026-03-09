@@ -1,3 +1,6 @@
+// Package auth provides session-based authentication: login, register, logout, and
+// RequireAuth middleware for protected routes. Sessions are stored in the database
+// and identified by a cookie (nervum_session).
 package auth
 
 import (
@@ -7,6 +10,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// Session represents a user session stored in the database. Used for cookie-based auth.
 type Session struct {
 	ID        uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
 	UserID    uuid.UUID      `gorm:"type:uuid;not null;index" json:"user_id"`

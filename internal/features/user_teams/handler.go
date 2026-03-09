@@ -7,10 +7,12 @@ import (
 	"github.com/google/uuid"
 )
 
+// Handler serves HTTP for user-teams: create, list (by user_id or team_id), delete.
 type Handler struct {
 	repo Repository
 }
 
+// NewHandler returns a user_teams Handler using the given repository.
 func NewHandler(repo Repository) *Handler {
 	return &Handler{repo: repo}
 }

@@ -12,11 +12,14 @@ import (
 
 const contextUserKey = "auth_user"
 
+// Handler serves HTTP CRUD for teams (create, list, get, update, delete). List/get respect
+// member visibility when the user is not admin/manager.
 type Handler struct {
 	repo         Repository
 	userTeamRepo userteam.Repository
 }
 
+// NewHandler returns a teams Handler with the given team and user_team repositories.
 func NewHandler(repo Repository, userTeamRepo userteam.Repository) *Handler {
 	return &Handler{repo: repo, userTeamRepo: userTeamRepo}
 }

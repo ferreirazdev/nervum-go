@@ -9,11 +9,14 @@ import (
 	"gorm.io/gorm"
 )
 
-const (
-	CookieName  = "nervum_session"
-	ContextUser = "auth_user"
-)
+// CookieName is the name of the session cookie set on login/register.
+const CookieName = "nervum_session"
 
+// ContextUser is the Gin context key under which the authenticated user is stored.
+const ContextUser = "auth_user"
+
+// RequireAuth returns a Gin middleware that validates the session cookie, loads the user,
+// and sets the user in context. Responds with 401 when missing or invalid.
 func RequireAuth(sessionRepo SessionRepository, userRepo user.Repository) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		tokenStr, err := c.Cookie(CookieName)

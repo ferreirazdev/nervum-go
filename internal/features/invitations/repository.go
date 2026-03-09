@@ -7,6 +7,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// Repository persists invitations and looks them up by ID or token.
 type Repository interface {
 	Create(ctx context.Context, inv *Invitation, teamIDs []uuid.UUID) error
 	GetByID(ctx context.Context, id uuid.UUID) (*Invitation, error)
@@ -20,6 +21,7 @@ type repository struct {
 	db *gorm.DB
 }
 
+// NewRepository returns an invitation Repository backed by the given DB.
 func NewRepository(db *gorm.DB) Repository {
 	return &repository{db: db}
 }

@@ -1,3 +1,4 @@
+// Package userteam provides CRUD for user-team membership (linking users to teams).
 package userteam
 
 import (
@@ -7,6 +8,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// UserTeam represents a user's membership in a team. Stored in table user_teams.
 type UserTeam struct {
 	ID        uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
 	UserID    uuid.UUID      `gorm:"type:uuid;not null;uniqueIndex:idx_user_team" json:"user_id"`

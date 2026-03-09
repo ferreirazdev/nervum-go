@@ -1,0 +1,1659 @@
+openapi: 3.0.3
+info:
+  title: Nervum API
+  description: |
+    API for Nervum – environment maps SaaS (visualize and manage services, databases,
+    queues, and relationships). This backend powers the Nervum web app and can be
+    used for integrations.
+  version: 1.0.0
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: Health
+  - name: Auth
+  - name: Organizations
+  - name: Users
+  - name: Teams
+  - name: User Teams
+  - name: Invitations
+  - name: Environments
+  - name: Entities
+  - name: Relationships
+  - name: User Environment Access
+
+paths:
+  /health:
+    get:
+      tags: [Health]
+      summary: Health check
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+
+  /api/v1/auth/register:
+    post:
+      tags: [Auth]
+      summary: Register a new user
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthRegisterRequest'
+      responses:
+        '201':
+          description: User created and session started
+          headers:
+            Set-Cookie:
+              description: Session cookie (nervum_session)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          description: Email already registered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/auth/login:
+    post:
+      tags: [Auth]
+      summary: Log in
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AuthLoginRequest'
+      responses:
+        '200':
+          description: Logged in; session cookie set
+          headers:
+            Set-Cookie:
+              description: Session cookie (nervum_session)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          description: Invalid credentials
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Log out
+      security: []
+      responses:
+        '204':
+          description: Session cleared
+
+  /api/v1/auth/me:
+    get:
+      tags: [Auth]
+      summary: Current user
+      security: [{ cookieAuth: [] }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/organizations:
+    post:
+      tags: [Organizations]
+      summary: Create organization
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrganizationCreate'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [Organizations]
+      summary: List organizations
+      security: [{ cookieAuth: [] }]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Organization'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/organizations/{id}:
+    get:
+      tags: [Organizations]
+      summary: Get organization by ID
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UUIDPathId'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      tags: [Organizations]
+      summary: Update organization
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UUIDPathId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/OrganizationUpdate'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Organization'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [Organizations]
+      summary: Delete organization
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UUIDPathId'
+      responses:
+        '204':
+          description: Deleted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/users:
+    post:
+      tags: [Users]
+      summary: Create user
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCreate'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [Users]
+      summary: List users
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: organization_id
+          in: query
+          description: Filter by organization (optional)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/users/{id}:
+    get:
+      tags: [Users]
+      summary: Get user by ID
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UUIDPathId'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      tags: [Users]
+      summary: Update user
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UUIDPathId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdate'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [Users]
+      summary: Delete user
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UUIDPathId'
+      responses:
+        '204':
+          description: Deleted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/teams:
+    post:
+      tags: [Teams]
+      summary: Create team
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeamCreate'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [Teams]
+      summary: List teams
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: organization_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TeamResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/teams/{id}:
+    get:
+      tags: [Teams]
+      summary: Get team by ID
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UUIDPathId'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      tags: [Teams]
+      summary: Update team
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UUIDPathId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeamUpdate'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [Teams]
+      summary: Delete team
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UUIDPathId'
+      responses:
+        '204':
+          description: Deleted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/user-teams:
+    post:
+      tags: [User Teams]
+      summary: Add user to team
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserTeamCreate'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserTeam'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [User Teams]
+      summary: List user-team links
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: user_id
+          in: query
+          description: Filter by user (provide user_id OR team_id)
+          schema:
+            type: string
+            format: uuid
+        - name: team_id
+          in: query
+          description: Filter by team (provide user_id OR team_id)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserTeam'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [User Teams]
+      summary: Remove user from team
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, team_id]
+              properties:
+                user_id:
+                  type: string
+                  format: uuid
+                team_id:
+                  type: string
+                  format: uuid
+      responses:
+        '204':
+          description: Removed
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/invitations:
+    post:
+      tags: [Invitations]
+      summary: Create invitation
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvitationCreate'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationCreateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [Invitations]
+      summary: List invitations
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [pending, accepted, expired]
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Invitation'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/invitations/{id}:
+    delete:
+      tags: [Invitations]
+      summary: Delete invitation
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UUIDPathId'
+      responses:
+        '204':
+          description: Deleted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/invitations/by-token/{token}:
+    get:
+      tags: [Invitations]
+      summary: Get invitation by token (public)
+      security: []
+      parameters:
+        - name: token
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/InvitationByTokenResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: Invitation not found or expired
+        '410':
+          description: Invitation already used or expired
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/invitations/accept:
+    post:
+      tags: [Invitations]
+      summary: Accept invitation (public)
+      security: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/InvitationAcceptRequest'
+      responses:
+        '200':
+          description: Existing user; session started
+          headers:
+            Set-Cookie:
+              description: Session cookie (nervum_session)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '201':
+          description: New user created; session started
+          headers:
+            Set-Cookie:
+              description: Session cookie (nervum_session)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          description: Invitation not found or expired
+        '409':
+          description: Invitation already used
+        '410':
+          description: Invitation expired
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/environments:
+    post:
+      tags: [Environments]
+      summary: Create environment
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvironmentCreate'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvironmentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [Environments]
+      summary: List environments
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: organization_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EnvironmentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/environments/{id}:
+    get:
+      tags: [Environments]
+      summary: Get environment by ID
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UUIDPathId'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvironmentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      tags: [Environments]
+      summary: Update environment
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UUIDPathId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnvironmentUpdate'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EnvironmentResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [Environments]
+      summary: Delete environment
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UUIDPathId'
+      responses:
+        '204':
+          description: Deleted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/entities:
+    post:
+      tags: [Entities]
+      summary: Create entity
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Entity'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Entity'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [Entities]
+      summary: List entities
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: organization_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - name: environment_id
+          in: query
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Entity'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/entities/{id}:
+    get:
+      tags: [Entities]
+      summary: Get entity by ID
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UUIDPathId'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Entity'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      tags: [Entities]
+      summary: Update entity
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UUIDPathId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Entity'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Entity'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [Entities]
+      summary: Delete entity
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UUIDPathId'
+      responses:
+        '204':
+          description: Deleted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/relationships:
+    post:
+      tags: [Relationships]
+      summary: Create relationship
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Relationship'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Relationship'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [Relationships]
+      summary: List relationships
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: organization_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Relationship'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/relationships/{id}:
+    get:
+      tags: [Relationships]
+      summary: Get relationship by ID
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UUIDPathId'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Relationship'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      tags: [Relationships]
+      summary: Update relationship
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UUIDPathId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Relationship'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Relationship'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [Relationships]
+      summary: Delete relationship
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UUIDPathId'
+      responses:
+        '204':
+          description: Deleted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/user-environment-access:
+    post:
+      tags: [User Environment Access]
+      summary: Create user-environment access
+      security: [{ cookieAuth: [] }]
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserEnvironmentAccess'
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvironmentAccess'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    get:
+      tags: [User Environment Access]
+      summary: List user-environment access
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: user_id
+          in: query
+          description: Filter by user (user_id OR environment_id required)
+          schema:
+            type: string
+            format: uuid
+        - name: environment_id
+          in: query
+          description: Filter by environment (user_id OR environment_id required)
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserEnvironmentAccess'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/user-environment-access/{id}:
+    get:
+      tags: [User Environment Access]
+      summary: Get user-environment access by ID
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UUIDPathId'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvironmentAccess'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    put:
+      tags: [User Environment Access]
+      summary: Update user-environment access
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UUIDPathId'
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserEnvironmentAccess'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserEnvironmentAccess'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+    delete:
+      tags: [User Environment Access]
+      summary: Delete user-environment access
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UUIDPathId'
+      responses:
+        '204':
+          description: Deleted
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: nervum_session
+      description: Session ID (UUID) set by login/register/accept-invitation
+
+  parameters:
+    UUIDPathId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  responses:
+    BadRequest:
+      description: Invalid request (e.g. validation error)
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Unauthorized:
+      description: Authentication required
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    NotFound:
+      description: Not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error:
+          type: string
+
+    AuthRegisterRequest:
+      type: object
+      required: [name, email, password]
+      properties:
+        name:
+          type: string
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+          minLength: 8
+
+    AuthLoginRequest:
+      type: object
+      required: [email, password]
+      properties:
+        email:
+          type: string
+          format: email
+        password:
+          type: string
+
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        role:
+          type: string
+          enum: [admin, manager, member]
+        organization_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    UserCreate:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        role:
+          type: string
+          enum: [admin, manager, member]
+        organization_id:
+          type: string
+          format: uuid
+
+    UserUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        organization_id:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [admin, manager, member]
+
+    Organization:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        website:
+          type: string
+        owner_id:
+          type: string
+          format: uuid
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    OrganizationCreate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        website:
+          type: string
+
+    OrganizationUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        website:
+          type: string
+
+    Team:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        icon:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    TeamResponse:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/Team'
+        - type: object
+          properties:
+            environment_ids:
+              type: array
+              items:
+                type: string
+                format: uuid
+
+    TeamCreate:
+      type: object
+      required: [organization_id, name]
+      properties:
+        organization_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        icon:
+          type: string
+        environment_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    TeamUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        icon:
+          type: string
+        environment_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+
+    UserTeam:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        team_id:
+          type: string
+          format: uuid
+        role:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+    UserTeamCreate:
+      type: object
+      required: [user_id, team_id]
+      properties:
+        user_id:
+          type: string
+          format: uuid
+        team_id:
+          type: string
+          format: uuid
+        role:
+          type: string
+
+    Invitation:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        token:
+          type: string
+        email:
+          type: string
+        organization_id:
+          type: string
+          format: uuid
+        invited_by_id:
+          type: string
+          format: uuid
+        role:
+          type: string
+        environment_id:
+          type: string
+          format: uuid
+        expires_at:
+          type: string
+          format: date-time
+        status:
+          type: string
+          enum: [pending, accepted, expired]
+        accepted_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        teams:
+          type: array
+          items:
+            type: object
+
+    InvitationCreate:
+      type: object
+      required: [email, team_ids]
+      properties:
+        email:
+          type: string
+          format: email
+        team_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+        environment_id:
+          type: string
+          format: uuid
+        role:
+          type: string
+          enum: [admin, manager, member]
+
+    InvitationCreateResponse:
+      type: object
+      properties:
+        invitation:
+          $ref: '#/components/schemas/Invitation'
+        invite_url:
+          type: string
+        token:
+          type: string
+
+    InvitationByTokenResponse:
+      type: object
+      properties:
+        email:
+          type: string
+        organization_id:
+          type: string
+        organization_name:
+          type: string
+        team_ids:
+          type: array
+          items:
+            type: string
+        environment_id:
+          type: string
+        role:
+          type: string
+        expires_at:
+          type: string
+          format: date-time
+
+    InvitationAcceptRequest:
+      type: object
+      required: [token]
+      properties:
+        token:
+          type: string
+        name:
+          type: string
+        password:
+          type: string
+          minLength: 8
+          description: Required for new users; min 8 characters
+
+    Environment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: [healthy, warning, critical]
+        created_at:
+          type: string
+          format: date-time
+
+    EnvironmentResponse:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/Environment'
+        - type: object
+          properties:
+            services_count:
+              type: integer
+              description: Number of entities (services) in this environment
+
+    EnvironmentCreate:
+      type: object
+      required: [organization_id, name]
+      properties:
+        organization_id:
+          type: string
+          format: uuid
+        name:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: [healthy, warning, critical]
+
+    EnvironmentUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        status:
+          type: string
+          enum: [healthy, warning, critical]
+
+    Entity:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+          format: uuid
+        environment_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [service, database, infra, team, roadmap, cost, metric]
+        name:
+          type: string
+        status:
+          type: string
+          enum: [healthy, warning, critical]
+        owner_team_id:
+          type: string
+          format: uuid
+        metadata:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    Relationship:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+          format: uuid
+        from_entity_id:
+          type: string
+          format: uuid
+        to_entity_id:
+          type: string
+          format: uuid
+        type:
+          type: string
+          enum: [depends_on, owned_by, runs_on, stores_data_in, generates_cost, monitored_by]
+        metadata:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+
+    UserEnvironmentAccess:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+        environment_id:
+          type: string
+          format: uuid
+        role:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+
+security:
+  - cookieAuth: []

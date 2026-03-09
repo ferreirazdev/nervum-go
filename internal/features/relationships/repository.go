@@ -7,6 +7,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// Repository persists relationships and lists by organization.
 type Repository interface {
 	Create(ctx context.Context, r *Relationship) error
 	GetByID(ctx context.Context, id uuid.UUID) (*Relationship, error)
@@ -19,6 +20,7 @@ type repository struct {
 	db *gorm.DB
 }
 
+// NewRepository returns a relationship Repository backed by the given DB.
 func NewRepository(db *gorm.DB) Repository {
 	return &repository{db: db}
 }

@@ -1,3 +1,5 @@
+// Package teams provides CRUD for teams and team-environment links. Teams belong to an
+// organization and can be granted access to specific environments; members are via user_teams.
 package teams
 
 import (
@@ -7,6 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// Team represents a team within an organization. Stored in table teams.
 type Team struct {
 	ID             uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
 	OrganizationID uuid.UUID      `gorm:"type:uuid;not null;index" json:"organization_id"`
@@ -28,7 +31,7 @@ func (t *Team) BeforeCreate(tx *gorm.DB) error {
 	return nil
 }
 
-// TeamEnvironment links a team to environments it can access.
+// TeamEnvironment links a team to environments it can access. Stored in team_environments.
 type TeamEnvironment struct {
 	TeamID        uuid.UUID `gorm:"type:uuid;not null;uniqueIndex:idx_team_env" json:"team_id"`
 	EnvironmentID uuid.UUID `gorm:"type:uuid;not null;uniqueIndex:idx_team_env" json:"environment_id"`

@@ -1,3 +1,5 @@
+// Package environment provides CRUD for environments (e.g. prod, staging, dev) per organization.
+// Used by the map UI and for environment-scoped access control.
 package environment
 
 import (
@@ -7,6 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// Environment represents an environment within an organization. Stored in table environments.
 type Environment struct {
 	ID             uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
 	OrganizationID uuid.UUID      `gorm:"type:uuid;not null;index" json:"organization_id"`

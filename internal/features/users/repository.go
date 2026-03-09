@@ -7,6 +7,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// Repository persists users and looks them up by ID or email.
 type Repository interface {
 	Create(ctx context.Context, u *User) error
 	GetByID(ctx context.Context, id uuid.UUID) (*User, error)
@@ -21,6 +22,7 @@ type repository struct {
 	db *gorm.DB
 }
 
+// NewRepository returns a user Repository backed by the given DB.
 func NewRepository(db *gorm.DB) Repository {
 	return &repository{db: db}
 }

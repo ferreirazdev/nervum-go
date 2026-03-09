@@ -1,3 +1,5 @@
+// Package user provides CRUD for users and role-based permission helpers (CanInvite, CanManageTeams, etc.).
+// Used by the API server and by auth/invitations for session and invite flows.
 package user
 
 import (
@@ -7,12 +9,14 @@ import (
 	"gorm.io/gorm"
 )
 
+// Role constants for user.Role (admin, manager, member).
 const (
 	RoleAdmin   = "admin"
 	RoleManager = "manager"
 	RoleMember  = "member"
 )
 
+// User represents an account. Stored in table users; PasswordHash is never serialized to JSON.
 type User struct {
 	ID             uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
 	Email          string         `gorm:"type:text;uniqueIndex" json:"email"`

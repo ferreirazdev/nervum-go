@@ -7,6 +7,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// Repository persists organizations. Used by the handler and auth (e.g. auto-create org on register).
 type Repository interface {
 	Create(ctx context.Context, o *Organization) error
 	GetByID(ctx context.Context, id uuid.UUID) (*Organization, error)
@@ -19,6 +20,7 @@ type repository struct {
 	db *gorm.DB
 }
 
+// NewRepository returns an organization Repository backed by the given DB.
 func NewRepository(db *gorm.DB) Repository {
 	return &repository{db: db}
 }

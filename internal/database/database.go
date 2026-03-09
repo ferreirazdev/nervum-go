@@ -1,3 +1,5 @@
+// Package database provides GORM-based Postgres connectivity, migrations, and a SQLite
+// in-memory helper for tests. Used by the API server and integration tests.
 package database
 
 import (
@@ -10,6 +12,7 @@ import (
 	"gorm.io/gorm/logger"
 )
 
+// NewDB opens a Postgres connection using the given config and returns a GORM DB instance.
 func NewDB(cfg *config.DatabaseConfig) (*gorm.DB, error) {
 	dsn := fmt.Sprintf(
 		"host=%s port=%d user=%s password=%s dbname=%s sslmode=%s",

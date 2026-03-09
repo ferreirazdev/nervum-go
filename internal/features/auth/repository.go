@@ -8,6 +8,7 @@ import (
 	"gorm.io/gorm"
 )
 
+// SessionRepository persists and looks up sessions by ID.
 type SessionRepository interface {
 	Create(ctx context.Context, s *Session) error
 	GetByID(ctx context.Context, id uuid.UUID) (*Session, error)
@@ -18,6 +19,7 @@ type sessionRepository struct {
 	db *gorm.DB
 }
 
+// NewSessionRepository returns a SessionRepository backed by the given DB.
 func NewSessionRepository(db *gorm.DB) SessionRepository {
 	return &sessionRepository{db: db}
 }

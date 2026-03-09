@@ -16,6 +16,8 @@ import (
 	"gorm.io/gorm"
 )
 
+// AutoMigrate runs GORM AutoMigrate for all feature models (organizations, users, sessions,
+// environments, teams, entities, relationships, invitations, user_environment_access, etc.).
 func AutoMigrate(db *gorm.DB) error {
 	if err := db.AutoMigrate(
 		&organization.Organization{},
