@@ -10,14 +10,17 @@ import (
 
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 	"github.com/nervum/nervum-go/internal/config"
 	"github.com/nervum/nervum-go/internal/database"
 	"github.com/nervum/nervum-go/internal/features/auth"
 	"github.com/nervum/nervum-go/internal/features/environments"
 	"github.com/nervum/nervum-go/internal/features/entities"
+	"github.com/nervum/nervum-go/internal/features/integrations"
 	"github.com/nervum/nervum-go/internal/features/invitations"
 	"github.com/nervum/nervum-go/internal/features/organizations"
 	"github.com/nervum/nervum-go/internal/features/relationships"
+	"github.com/nervum/nervum-go/internal/features/repositories"
 	"github.com/nervum/nervum-go/internal/features/teams"
 	"github.com/nervum/nervum-go/internal/features/user_environment_access"
 	"github.com/nervum/nervum-go/internal/features/user_teams"
@@ -25,6 +28,9 @@ import (
 )
 
 func main() {
+	// Load .env from current directory so config sees GITHUB_CLIENT_ID, etc.
+	_ = godotenv.Load()
+
 	// Load config, connect DB, run migrations, register routes, and listen.
 	cfg := config.Load()
 	db, err := database.NewDB(&cfg.Database)
@@ -77,6 +83,14 @@ func main() {
 	entity.NewHandler(entityRepo).Register(protected)
 	relationship.NewHandler(relationship.NewRepository(db)).Register(protected)
 	userenvironmentaccess.NewHandler(userenvironmentaccess.NewRepository(db)).Register(protected)
+	integrationRepo := integrations.NewRepository(db)
+	integHandler := integrations.NewHandler(integrationRepo, orgRepo, &cfg.Integrations)
+	integHandler.Register(protected)
+	integHandler.RegisterPublic(api)
+	dashboardHandler := integrations.NewDashboardHandler(integrationRepo, orgRepo, &cfg.Integrations)
+	dashboardHandler.Register(protected.Group("/organizations"))
+	repositoriesHandler := repositories.NewHandler(repositories.NewRepository(db))
+	repositoriesHandler.Register(protected.Group("/organizations"))
 
 	addr := ":" + fmt.Sprint(cfg.Server.Port)
 	log.Printf("listening on %s", addr)

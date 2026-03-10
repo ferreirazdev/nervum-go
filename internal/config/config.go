@@ -3,14 +3,28 @@
 package config
 
 import (
+	"encoding/base64"
+	"encoding/hex"
 	"os"
 	"strconv"
 )
 
 // Config holds server and database configuration loaded from the environment.
 type Config struct {
-	Server   ServerConfig
-	Database DatabaseConfig
+	Server        ServerConfig
+	Database      DatabaseConfig
+	Integrations  IntegrationsConfig
+}
+
+// IntegrationsConfig holds OAuth and encryption settings for org integrations.
+type IntegrationsConfig struct {
+	EncryptionKey      []byte // 32 bytes for AES-256; from INTEGRATION_ENCRYPTION_KEY (hex or base64)
+	FrontendURL        string // Redirect after OAuth callback
+	APIBaseURL         string // Backend base URL for OAuth callback (e.g. http://localhost:8080)
+	GitHubClientID     string
+	GitHubClientSecret string
+	GoogleClientID     string
+	GoogleClientSecret string
 }
 
 // ServerConfig holds HTTP server settings (e.g. port).
@@ -35,6 +49,23 @@ func Load() *Config {
 	port, _ := strconv.Atoi(getEnv("PORT", "8080"))
 	dbPort, _ := strconv.Atoi(getEnv("DB_PORT", "5432"))
 
+	integrations := IntegrationsConfig{
+		FrontendURL:        getEnv("FRONTEND_URL", "http://localhost:5173"),
+		APIBaseURL:         getEnv("API_BASE_URL", "http://localhost:8080"),
+		GitHubClientID:     getEnv("GITHUB_CLIENT_ID", ""),
+		GitHubClientSecret: getEnv("GITHUB_CLIENT_SECRET", ""),
+		GoogleClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
+		GoogleClientSecret: getEnv("GOOGLE_CLIENT_SECRET", ""),
+	}
+	if k := getEnv("INTEGRATION_ENCRYPTION_KEY", ""); k != "" {
+		if raw, err := hex.DecodeString(k); err == nil && len(raw) == 32 {
+			integrations.EncryptionKey = raw
+		} else if raw, err := base64.StdEncoding.DecodeString(k); err == nil && len(raw) == 32 {
+			integrations.EncryptionKey = raw
+		}
+		// If decode fails or length != 32, EncryptionKey stays nil; connect will fail with clear error
+	}
+
 	return &Config{
 		Server: ServerConfig{
 			Port: port,
@@ -47,6 +78,7 @@ func Load() *Config {
 			DBName:   getEnv("DB_NAME", "nervum"),
 			SSLMode:  getEnv("DB_SSLMODE", "disable"),
 		},
+		Integrations: integrations,
 	}
 }
 

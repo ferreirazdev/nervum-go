@@ -23,6 +23,8 @@ tags:
   - name: Entities
   - name: Relationships
   - name: User Environment Access
+  - name: Integrations
+  - name: Dashboard
 
 paths:
   /health:
@@ -1159,6 +1161,246 @@ paths:
         '500':
           $ref: '#/components/responses/InternalError'
 
+  /api/v1/integrations:
+    get:
+      tags: [Integrations]
+      summary: List integrations for an organization
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - name: organization_id
+          in: query
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Integration'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/integrations/{id}:
+    delete:
+      tags: [Integrations]
+      summary: Disconnect an integration
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UUIDPathId'
+      responses:
+        '204':
+          description: Disconnected
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/organizations/{id}/dashboard/github/commits:
+    get:
+      tags: [Dashboard]
+      summary: GitHub commits for dashboard (proxy)
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UUIDPathId'
+        - name: repo
+          in: query
+          required: true
+          description: Repository as owner/repo
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DashboardGitHubCommit'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/organizations/{id}/dashboard/github/pulls:
+    get:
+      tags: [Dashboard]
+      summary: GitHub pull requests for dashboard (proxy)
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UUIDPathId'
+        - name: repo
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DashboardGitHubPR'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/organizations/{id}/dashboard/github/merges:
+    get:
+      tags: [Dashboard]
+      summary: GitHub merges for dashboard (proxy)
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UUIDPathId'
+        - name: repo
+          in: query
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DashboardGitHubMerge'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/organizations/{id}/dashboard/gcloud/builds:
+    get:
+      tags: [Dashboard]
+      summary: GCloud builds for dashboard (proxy)
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UUIDPathId'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DashboardGCloudBuild'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/organizations/{id}/dashboard/gcloud/deploys:
+    get:
+      tags: [Dashboard]
+      summary: GCloud deploys for dashboard (proxy)
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UUIDPathId'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DashboardGCloudDeploy'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/organizations/{id}/dashboard/gcloud/logs:
+    get:
+      tags: [Dashboard]
+      summary: GCloud logs for dashboard (proxy)
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UUIDPathId'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DashboardGCloudLogEntry'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/organizations/{id}/dashboard/gcloud/services-health:
+    get:
+      tags: [Dashboard]
+      summary: GCloud services health for dashboard (proxy)
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UUIDPathId'
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/DashboardGCloudServiceHealth'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
 components:
   securitySchemes:
     cookieAuth:
@@ -1654,6 +1896,100 @@ components:
         created_at:
           type: string
           format: date-time
+
+    Integration:
+      type: object
+      description: Org integration (tokens never returned)
+      properties:
+        id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+          format: uuid
+        provider:
+          type: string
+          enum: [github, gcloud]
+        scopes:
+          type: string
+        connected_at:
+          type: string
+          format: date-time
+        metadata:
+          type: object
+        created_at:
+          type: string
+          format: date-time
+        updated_at:
+          type: string
+          format: date-time
+
+    DashboardGitHubCommit:
+      type: object
+      properties:
+        id: { type: string }
+        hash: { type: string }
+        message: { type: string }
+        author: { type: string }
+        repo: { type: string }
+        created_at: { type: string }
+
+    DashboardGitHubPR:
+      type: object
+      properties:
+        id: { type: string }
+        number: { type: integer }
+        title: { type: string }
+        state: { type: string }
+        author: { type: string }
+        created_at: { type: string }
+
+    DashboardGitHubMerge:
+      type: object
+      properties:
+        id: { type: string }
+        title: { type: string }
+        sourceBranch: { type: string }
+        targetBranch: { type: string }
+        author: { type: string }
+        created_at: { type: string }
+
+    DashboardGCloudBuild:
+      type: object
+      properties:
+        id: { type: string }
+        buildId: { type: string }
+        status: { type: string }
+        durationSeconds: { type: integer }
+        trigger: { type: string }
+        created_at: { type: string }
+
+    DashboardGCloudDeploy:
+      type: object
+      properties:
+        id: { type: string }
+        serviceName: { type: string }
+        revision: { type: string }
+        status: { type: string }
+        region: { type: string }
+        created_at: { type: string }
+
+    DashboardGCloudLogEntry:
+      type: object
+      properties:
+        id: { type: string }
+        message: { type: string }
+        severity: { type: string }
+        service: { type: string }
+        created_at: { type: string }
+
+    DashboardGCloudServiceHealth:
+      type: object
+      properties:
+        id: { type: string }
+        name: { type: string }
+        status: { type: string }
+        detail: { type: string }
 
 security:
   - cookieAuth: []
