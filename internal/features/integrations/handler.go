@@ -34,6 +34,7 @@ func NewHandler(repo Repository, orgRepo organization.Repository, cfg *config.In
 func (h *Handler) Register(r *gin.RouterGroup) {
 	g := r.Group("/integrations")
 	g.GET("", h.List)
+	g.PUT("/:id", h.Update)
 	g.DELETE("/:id", h.Delete)
 	g.GET("/github/connect", h.GitHubConnect)
 	g.GET("/gcloud/connect", h.GCloudConnect)
@@ -144,6 +145,78 @@ func (h *Handler) Delete(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+// updateMetadataRequest is the body for PUT /integrations/:id (metadata only).
+type updateMetadataRequest struct {
+	Metadata map[string]string `json:"metadata"`
+}
+
+func (h *Handler) Update(c *gin.Context) {
+	u, ok := c.Get(auth.ContextUser)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
+	}
+	currentUser := u.(*user.User)
+	id, err := uuid.Parse(c.Param("id"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid id"})
+		return
+	}
+	integration, err := h.repo.GetByID(c.Request.Context(), id)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+	if currentUser.OrganizationID == nil || *currentUser.OrganizationID != integration.OrganizationID {
+		c.JSON(http.StatusForbidden, gin.H{"error": "cannot update integration for another organization"})
+		return
+	}
+	org, err := h.orgRepo.GetByID(c.Request.Context(), integration.OrganizationID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+	canEdit := user.CanEditOrganization(currentUser.Role) || (org.OwnerID != nil && *org.OwnerID == currentUser.ID)
+	if !canEdit {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only organization owner or admin can update integrations"})
+		return
+	}
+	var body updateMetadataRequest
+	if err := c.ShouldBindJSON(&body); err != nil || body.Metadata == nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "metadata object required"})
+		return
+	}
+	metaJSON, err := json.Marshal(body.Metadata)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "invalid metadata"})
+		return
+	}
+	integration.Metadata = metaJSON
+	integration.UpdatedAt = time.Now()
+	if err := h.repo.Update(c.Request.Context(), integration); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+	meta := json.RawMessage(integration.Metadata)
+	if meta == nil {
+		meta = []byte("null")
+	}
+	c.JSON(http.StatusOK, listResponse{
+		ID:             integration.ID.String(),
+		OrganizationID: integration.OrganizationID.String(),
+		Provider:       integration.Provider,
+		Scopes:         integration.Scopes,
+		ConnectedAt:    integration.ConnectedAt,
+		Metadata:       meta,
+		CreatedAt:      integration.CreatedAt,
+		UpdatedAt:      integration.UpdatedAt,
+	})
 }
 
 func (h *Handler) GitHubConnect(c *gin.Context) {

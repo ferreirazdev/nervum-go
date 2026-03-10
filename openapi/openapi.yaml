@@ -1191,6 +1191,40 @@ paths:
           $ref: '#/components/responses/InternalError'
 
   /api/v1/integrations/{id}:
+    put:
+      tags: [Integrations]
+      summary: Update integration metadata (e.g. GCloud project_id)
+      security: [{ cookieAuth: [] }]
+      parameters:
+        - $ref: '#/components/parameters/UUIDPathId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [metadata]
+              properties:
+                metadata:
+                  type: object
+                  additionalProperties: { type: string }
+                  description: Key-value metadata (e.g. project_id for GCloud)
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Integration'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
     delete:
       tags: [Integrations]
       summary: Disconnect an integration
