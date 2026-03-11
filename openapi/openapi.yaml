@@ -1531,6 +1531,9 @@ components:
         organization_id:
           type: string
           format: uuid
+        onboarding:
+          type: boolean
+          description: true when user has completed all 4 onboarding steps
         created_at:
           type: string
           format: date-time
@@ -1564,6 +1567,9 @@ components:
         role:
           type: string
           enum: [admin, manager, member]
+        onboarding:
+          type: boolean
+          description: set to true when user completes all 4 onboarding steps (only for self)
 
     Organization:
       type: object

@@ -120,9 +120,10 @@ func (h *Handler) Update(c *gin.Context) {
 		return
 	}
 	var req struct {
-		Name           *string    `json:"name"`
-		OrganizationID *uuid.UUID `json:"organization_id"`
-		Role           *string    `json:"role"`
+		Name                  *string    `json:"name"`
+		OrganizationID        *uuid.UUID `json:"organization_id"`
+		Role                  *string    `json:"role"`
+		OnboardingCompleted   *bool      `json:"onboarding"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
@@ -144,6 +145,13 @@ func (h *Handler) Update(c *gin.Context) {
 			return
 		}
 		u.Role = *req.Role
+	}
+	if req.OnboardingCompleted != nil && *req.OnboardingCompleted {
+		if id != currentUser.ID {
+			c.JSON(http.StatusForbidden, gin.H{"error": "can only set own onboarding"})
+			return
+		}
+		u.OnboardingCompleted = true
 	}
 	if err := h.repo.Update(c.Request.Context(), u); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})

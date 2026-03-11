@@ -67,28 +67,14 @@ func (h *Handler) RegisterUser(c *gin.Context) {
 		return
 	}
 
-	// Auto-create a personal organization for the new user
-	org := &organization.Organization{Name: req.Name + "'s Organization"}
-	if err := h.orgRepo.Create(c.Request.Context(), org); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
-		return
-	}
-
-	orgID := org.ID
 	u := &user.User{
-		ID:             uuid.New(),
-		Email:          req.Email,
-		Name:           req.Name,
-		Role:           user.RoleAdmin,
-		OrganizationID: &orgID,
-		PasswordHash:   string(hash),
+		ID:           uuid.New(),
+		Email:        req.Email,
+		Name:         req.Name,
+		Role:         user.RoleAdmin,
+		PasswordHash: string(hash),
 	}
 	if err := h.userRepo.Create(c.Request.Context(), u); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
-		return
-	}
-	org.OwnerID = &u.ID
-	if err := h.orgRepo.Update(c.Request.Context(), org); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}

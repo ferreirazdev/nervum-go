@@ -18,6 +18,16 @@ import (
 
 const contextUserKey = "auth_user" // must match auth.ContextUser for protected routes
 
+// returnToAllowlist defines allowed return_to values for OAuth redirect. Empty means default (/integrations).
+func returnToAllowlist(v string) string {
+	switch v {
+	case "onboarding", "integrations":
+		return v
+	default:
+		return ""
+	}
+}
+
 // Handler serves HTTP for integrations: list, delete, OAuth connect and callbacks.
 type Handler struct {
 	repo    Repository
@@ -258,7 +268,13 @@ func (h *Handler) GitHubConnect(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "integration encryption key is not configured or invalid (must be 32 bytes)"})
 		return
 	}
-	state, err := EncodeState(h.cfg.EncryptionKey, orgID)
+	returnTo := returnToAllowlist(c.Query("return_to"))
+	var state string
+	if returnTo != "" {
+		state, err = EncodeStateWithReturn(h.cfg.EncryptionKey, orgID, returnTo)
+	} else {
+		state, err = EncodeState(h.cfg.EncryptionKey, orgID)
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build state"})
 		return
@@ -292,7 +308,7 @@ func (h *Handler) GitHubCallback(c *gin.Context) {
 		redirectFail(h.cfg.FrontendURL, c, "integration not configured")
 		return
 	}
-	orgID, err := DecodeState(h.cfg.EncryptionKey, state)
+	orgID, returnTo, err := DecodeStateWithReturn(h.cfg.EncryptionKey, state)
 	if err != nil {
 		redirectFail(h.cfg.FrontendURL, c, "invalid state")
 		return
@@ -342,7 +358,11 @@ func (h *Handler) GitHubCallback(c *gin.Context) {
 		}
 		_ = h.repo.Create(c.Request.Context(), integ)
 	}
-	c.Redirect(http.StatusFound, h.cfg.FrontendURL+"/integrations?github=connected")
+	path := "/integrations?github=connected"
+	if returnTo == "onboarding" {
+		path = "/onboarding?github=connected"
+	}
+	c.Redirect(http.StatusFound, h.cfg.FrontendURL+path)
 }
 
 func (h *Handler) GCloudConnect(c *gin.Context) {
@@ -384,7 +404,13 @@ func (h *Handler) GCloudConnect(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "integration encryption key is not configured or invalid (must be 32 bytes)"})
 		return
 	}
-	state, err := EncodeState(h.cfg.EncryptionKey, orgID)
+	returnTo := returnToAllowlist(c.Query("return_to"))
+	var state string
+	if returnTo != "" {
+		state, err = EncodeStateWithReturn(h.cfg.EncryptionKey, orgID, returnTo)
+	} else {
+		state, err = EncodeState(h.cfg.EncryptionKey, orgID)
+	}
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build state"})
 		return
@@ -423,7 +449,7 @@ func (h *Handler) GCloudCallback(c *gin.Context) {
 		redirectFail(h.cfg.FrontendURL, c, "integration not configured")
 		return
 	}
-	orgID, err := DecodeState(h.cfg.EncryptionKey, state)
+	orgID, returnTo, err := DecodeStateWithReturn(h.cfg.EncryptionKey, state)
 	if err != nil {
 		redirectFail(h.cfg.FrontendURL, c, "invalid state")
 		return
@@ -478,7 +504,11 @@ func (h *Handler) GCloudCallback(c *gin.Context) {
 		}
 		_ = h.repo.Create(c.Request.Context(), integ)
 	}
-	c.Redirect(http.StatusFound, h.cfg.FrontendURL+"/integrations?gcloud=connected")
+	path := "/integrations?gcloud=connected"
+	if returnTo == "onboarding" {
+		path = "/onboarding?gcloud=connected"
+	}
+	c.Redirect(http.StatusFound, h.cfg.FrontendURL+path)
 }
 
 func redirectFail(frontendURL string, c *gin.Context, reason string) {

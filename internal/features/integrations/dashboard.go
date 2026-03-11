@@ -3,6 +3,7 @@ package integrations
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
@@ -428,6 +429,44 @@ func (h *DashboardHandler) gcpProjectID(c *gin.Context, integ *Integration) (str
 	return meta.ProjectID, true
 }
 
+// gcpRegion returns the Cloud Run region from integration metadata, or "us-central1" if unset.
+func (h *DashboardHandler) gcpRegion(integ *Integration) string {
+	if len(integ.Metadata) == 0 {
+		return "us-central1"
+	}
+	var meta struct {
+		Region string `json:"region"`
+	}
+	if err := json.Unmarshal(integ.Metadata, &meta); err != nil {
+		return "us-central1"
+	}
+	if meta.Region == "" {
+		return "us-central1"
+	}
+	return meta.Region
+}
+
+// gcpErrorMessage builds a user-facing error string for GCP API non-OK responses.
+func gcpErrorMessage(apiName string, statusCode int, body []byte) string {
+	base := apiName + " error"
+	switch statusCode {
+	case http.StatusUnauthorized:
+		base = "Authentication failed; token may be expired."
+	case http.StatusForbidden:
+		base = apiName + " not enabled or permission denied. Enable the API in GCP Console and ensure the account has the required viewer role."
+	case http.StatusNotFound:
+		base = "Project or resource not found."
+	}
+	detail := strings.TrimSpace(string(body))
+	if len(detail) > 200 {
+		detail = detail[:200] + "..."
+	}
+	if detail != "" {
+		return base + " (" + strconv.Itoa(statusCode) + ": " + detail + ")"
+	}
+	return base + " (" + strconv.Itoa(statusCode) + ")"
+}
+
 func (h *DashboardHandler) GCloudBuilds(c *gin.Context) {
 	_, orgID, ok := h.requireOrgMember(c)
 	if !ok {
@@ -451,7 +490,9 @@ func (h *DashboardHandler) GCloudBuilds(c *gin.Context) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		c.JSON(resp.StatusCode, gin.H{"error": "Cloud Build API error"})
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 500))
+		msg := gcpErrorMessage("Cloud Build API", resp.StatusCode, body)
+		c.JSON(resp.StatusCode, gin.H{"error": msg})
 		return
 	}
 	var list gcpBuildList
@@ -531,8 +572,7 @@ func (h *DashboardHandler) GCloudDeploys(c *gin.Context) {
 	if !ok {
 		return
 	}
-	// List services in us-central1 (default); could be made configurable
-	location := "us-central1"
+	location := h.gcpRegion(integ)
 	url := "https://run.googleapis.com/v1/projects/" + projectID + "/locations/" + location + "/services"
 	req, _ := http.NewRequestWithContext(c.Request.Context(), "GET", url, nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -543,7 +583,9 @@ func (h *DashboardHandler) GCloudDeploys(c *gin.Context) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		c.JSON(resp.StatusCode, gin.H{"error": "Cloud Run API error"})
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 500))
+		msg := gcpErrorMessage("Cloud Run API", resp.StatusCode, body)
+		c.JSON(resp.StatusCode, gin.H{"error": msg})
 		return
 	}
 	var list gcpRunServiceList
@@ -629,7 +671,9 @@ func (h *DashboardHandler) GCloudLogs(c *gin.Context) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		c.JSON(resp.StatusCode, gin.H{"error": "Logging API error"})
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 500))
+		msg := gcpErrorMessage("Logging API", resp.StatusCode, body)
+		c.JSON(resp.StatusCode, gin.H{"error": msg})
 		return
 	}
 	var list gcpLogListResponse
@@ -682,7 +726,7 @@ func (h *DashboardHandler) GCloudServicesHealth(c *gin.Context) {
 	if !ok {
 		return
 	}
-	location := "us-central1"
+	location := h.gcpRegion(integ)
 	url := "https://run.googleapis.com/v1/projects/" + projectID + "/locations/" + location + "/services"
 	req, _ := http.NewRequestWithContext(c.Request.Context(), "GET", url, nil)
 	req.Header.Set("Authorization", "Bearer "+token)
@@ -693,7 +737,9 @@ func (h *DashboardHandler) GCloudServicesHealth(c *gin.Context) {
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		c.JSON(resp.StatusCode, gin.H{"error": "Cloud Run API error"})
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 500))
+		msg := gcpErrorMessage("Cloud Run API", resp.StatusCode, body)
+		c.JSON(resp.StatusCode, gin.H{"error": msg})
 		return
 	}
 	var list gcpRunServiceList
