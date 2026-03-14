@@ -26,6 +26,9 @@ internal/
     entities/                Map nodes (services, DBs, etc.)
     relationships/           Edges between entities
     user_environment_access/  RBAC-style access per user–environment
+    integrations/            OAuth (GitHub, Google), encryption, dashboard (GitHub/GCloud)
+    repositories/             Org-linked repositories (e.g. GitHub repos)
+    orgservices/              Organization-level services
 ```
 
 ## Request flow

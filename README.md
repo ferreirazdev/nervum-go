@@ -41,14 +41,21 @@ cmd/api/                    # Entrypoint (main service for the SaaS)
 internal/
   config/                   # Env-based config for SaaS deployments
   database/                 # GORM connection, migrations, test DB
-  pkg/types/                # Shared types (e.g. JSONB)
+  pkg/                      # Shared internal packages (ratelimit, secureheaders, types)
   features/
+    auth/                   # Sessions, login/register/logout, RequireAuth
     organizations/          # Tenants / orgs
-    users/                  # Accounts
+    users/                  # Accounts + permissions
+    teams/                  # Teams and team–environment links
+    user_teams/             # User–team membership
+    invitations/            # Invite-by-email, by-token, accept
     environments/           # Environments per org (prod/staging/dev...)
     entities/               # Nodes in the environment map
     relationships/          # Edges between entities
-    user_environment_access/# RBAC-style environment access
+    user_environment_access/ # RBAC-style environment access
+    integrations/           # OAuth (GitHub, Google), dashboard
+    repositories/           # Org-linked repositories
+    orgservices/            # Organization-level services
 ```
 
 ---
@@ -96,6 +103,10 @@ These endpoints back the main SaaS features (exact routes may evolve over time; 
 - **Health**
   - `GET /health`
 
+- **Auth** (public: login, register; protected: logout, me)
+  - `POST /api/v1/auth/register`, `POST /api/v1/auth/login` (rate-limited)
+  - `POST /api/v1/auth/logout`, `GET /api/v1/auth/me` (protected)
+
 - **Organizations**
   - `POST /api/v1/organizations`
   - `GET /api/v1/organizations`
@@ -108,6 +119,16 @@ These endpoints back the main SaaS features (exact routes may evolve over time; 
   - `PUT /api/v1/users/:id`
   - `DELETE /api/v1/users/:id`
 
+- **Teams**
+  - `POST/GET/PUT/DELETE /api/v1/teams` (query: `organization_id`)
+
+- **User teams** (user–team membership)
+  - `POST/GET/PUT/DELETE /api/v1/user-teams` (query: `user_id` or `team_id`)
+
+- **Invitations** (public: by-token, accept; protected: create, list, etc.)
+  - `GET /api/v1/invitations/by-token/:token`, `POST /api/v1/invitations/accept` (public)
+  - `POST/GET/DELETE /api/v1/invitations` (protected)
+
 - **Environments**
   - `POST/GET/PUT/DELETE /api/v1/environments` (query: `organization_id`)
 
@@ -119,6 +140,16 @@ These endpoints back the main SaaS features (exact routes may evolve over time; 
 
 - **User environment access**
   - `POST/GET/PUT/DELETE /api/v1/user-environment-access` (query: `user_id` or `environment_id`)
+
+- **Integrations** (OAuth connect, disconnect, state; some routes public)
+  - `GET/POST/DELETE /api/v1/integrations/...` (e.g. connect callback, list)
+
+- **Dashboard** (under `/api/v1/organizations/:orgId/...`) — GitHub/GCloud dashboard data
+  - Dashboard handlers mounted under `protected.Group("/organizations")`
+
+- **Repositories** (under `/api/v1/organizations/:orgId/...`) — org-linked repositories
+
+- **Org services** (under `/api/v1/organizations/:orgId/...`) — organization-level services
 
 ---
 
