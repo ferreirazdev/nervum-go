@@ -1,6 +1,25 @@
 run:
 	go run cmd/api/main.go
 
+migrate-up:
+	go run ./cmd/migrate up
+
+migrate-down:
+	go run ./cmd/migrate down $(N)
+
+migrate-version:
+	go run ./cmd/migrate version
+
+migrate-force:
+	go run ./cmd/migrate force $(V)
+
+migrate-create:
+	@read -p "Migration name (snake_case): " name; \
+	count=$$(ls migrations/*.sql 2>/dev/null | wc -l | tr -d ' '); \
+	seq=$$(printf "%06d" $$(( $$count / 2 + 1 ))); \
+	touch migrations/$${seq}_$${name}.up.sql migrations/$${seq}_$${name}.down.sql; \
+	echo "Created migrations/$${seq}_$${name}.up.sql and migrations/$${seq}_$${name}.down.sql"
+
 cli:
 	go run cmd/healthcheck/main.go
 test:

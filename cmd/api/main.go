@@ -40,7 +40,11 @@ func main() {
 	if err != nil {
 		log.Fatalf("database: %v", err)
 	}
-	if err := database.AutoMigrate(db); err != nil {
+	sqlDB, err := db.DB()
+	if err != nil {
+		log.Fatalf("database.DB(): %v", err)
+	}
+	if err := database.RunMigrations(sqlDB); err != nil {
 		log.Fatalf("migrate: %v", err)
 	}
 
