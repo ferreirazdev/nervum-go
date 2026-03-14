@@ -20,14 +20,17 @@ const (
 
 // Handler handles auth HTTP routes: register, login, logout, and me (current user).
 type Handler struct {
-	sessionRepo SessionRepository
-	userRepo    user.Repository
-	orgRepo     organization.Repository
+	sessionRepo   SessionRepository
+	userRepo      user.Repository
+	orgRepo       organization.Repository
+	serviceToken  string
+	serviceUserID string
 }
 
 // NewHandler returns an auth Handler with the given session and user repositories.
-func NewHandler(sessionRepo SessionRepository, userRepo user.Repository, orgRepo organization.Repository) *Handler {
-	return &Handler{sessionRepo: sessionRepo, userRepo: userRepo, orgRepo: orgRepo}
+// serviceToken and serviceUserID are passed to RequireAuth for Bearer-token (CLI) support; can be empty.
+func NewHandler(sessionRepo SessionRepository, userRepo user.Repository, orgRepo organization.Repository, serviceToken, serviceUserID string) *Handler {
+	return &Handler{sessionRepo: sessionRepo, userRepo: userRepo, orgRepo: orgRepo, serviceToken: serviceToken, serviceUserID: serviceUserID}
 }
 
 // Register mounts auth routes under /auth. sensitiveMiddleware is applied to
@@ -39,7 +42,7 @@ func (h *Handler) Register(r *gin.RouterGroup, sensitiveMiddleware ...gin.Handle
 	g.POST("/register", registerHandlers...)
 	g.POST("/login", loginHandlers...)
 	g.POST("/logout", h.Logout)
-	g.GET("/me", RequireAuth(h.sessionRepo, h.userRepo), h.Me)
+	g.GET("/me", RequireAuth(h.sessionRepo, h.userRepo, h.serviceToken, h.serviceUserID), h.Me)
 }
 
 type registerRequest struct {

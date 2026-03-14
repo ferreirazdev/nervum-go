@@ -5,7 +5,6 @@ package main
 import (
 	"fmt"
 	"log"
-	"net/http"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -26,6 +25,7 @@ import (
 	"github.com/nervum/nervum-go/internal/features/user_environment_access"
 	"github.com/nervum/nervum-go/internal/features/user_teams"
 	"github.com/nervum/nervum-go/internal/features/users"
+	"github.com/nervum/nervum-go/internal/pkg/health"
 	"github.com/nervum/nervum-go/internal/pkg/ratelimit"
 	"github.com/nervum/nervum-go/internal/pkg/secureheaders"
 )
@@ -56,19 +56,19 @@ func main() {
 		MaxAge:           12 * time.Hour,
 	}))
 
-	r.GET("/health", func(c *gin.Context) { c.JSON(http.StatusOK, gin.H{"status": "ok"}) })
+	r.GET("/health", health.Handler(db))
 
 	userRepo := user.NewRepository(db)
 	orgRepo := organization.NewRepository(db)
 	entityRepo := entity.NewRepository(db)
 	sessionRepo := auth.NewSessionRepository(db)
-	requireAuth := auth.RequireAuth(sessionRepo, userRepo)
+	requireAuth := auth.RequireAuth(sessionRepo, userRepo, cfg.Server.ServiceToken, cfg.Server.ServiceUserID)
 
 	api := r.Group("/api/v1")
 
 	// Public auth routes — login and register are rate-limited (5 attempts/minute per IP).
 	authRateLimit := ratelimit.IPRateLimit(5, time.Minute)
-	auth.NewHandler(sessionRepo, userRepo, orgRepo).Register(api, authRateLimit)
+	auth.NewHandler(sessionRepo, userRepo, orgRepo, cfg.Server.ServiceToken, cfg.Server.ServiceUserID).Register(api, authRateLimit)
 
 	// Protected routes
 	protected := api.Group("")

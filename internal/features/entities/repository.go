@@ -12,6 +12,8 @@ type Repository interface {
 	Create(ctx context.Context, e *Entity) error
 	GetByID(ctx context.Context, id uuid.UUID) (*Entity, error)
 	ListByOrganization(ctx context.Context, orgID uuid.UUID, envID *uuid.UUID) ([]Entity, error)
+	ListWithHealthCheck(ctx context.Context, orgID uuid.UUID, envID *uuid.UUID) ([]Entity, error)
+	ListAllWithHealthCheck(ctx context.Context, envID *uuid.UUID) ([]Entity, error)
 	CountByEnvironment(ctx context.Context, envID uuid.UUID) (int64, error)
 	Update(ctx context.Context, e *Entity) error
 	Delete(ctx context.Context, id uuid.UUID) error
@@ -42,6 +44,28 @@ func (r *repository) GetByID(ctx context.Context, id uuid.UUID) (*Entity, error)
 func (r *repository) ListByOrganization(ctx context.Context, orgID uuid.UUID, envID *uuid.UUID) ([]Entity, error) {
 	var list []Entity
 	q := r.db.WithContext(ctx).Where("organization_id = ?", orgID)
+	if envID != nil {
+		q = q.Where("environment_id = ?", *envID)
+	}
+	err := q.Find(&list).Error
+	return list, err
+}
+
+// ListWithHealthCheck returns entities that have a health check URL configured, optionally scoped by org and environment.
+func (r *repository) ListWithHealthCheck(ctx context.Context, orgID uuid.UUID, envID *uuid.UUID) ([]Entity, error) {
+	var list []Entity
+	q := r.db.WithContext(ctx).Where("organization_id = ? AND health_check_url != ''", orgID)
+	if envID != nil {
+		q = q.Where("environment_id = ?", *envID)
+	}
+	err := q.Find(&list).Error
+	return list, err
+}
+
+// ListAllWithHealthCheck returns all entities that have a health check URL configured, optionally scoped by environment (no org filter).
+func (r *repository) ListAllWithHealthCheck(ctx context.Context, envID *uuid.UUID) ([]Entity, error) {
+	var list []Entity
+	q := r.db.WithContext(ctx).Where("health_check_url != ''")
 	if envID != nil {
 		q = q.Where("environment_id = ?", *envID)
 	}

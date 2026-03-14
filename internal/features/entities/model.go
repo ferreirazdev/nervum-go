@@ -35,9 +35,14 @@ type Entity struct {
 	Status         string         `gorm:"type:text" json:"status"` // healthy, warning, critical
 	OwnerTeamID    *uuid.UUID     `gorm:"type:uuid" json:"owner_team_id,omitempty"`
 	Metadata       types.JSONB    `gorm:"type:jsonb" json:"metadata,omitempty"`
-	CreatedAt      time.Time      `json:"created_at"`
-	UpdatedAt      time.Time      `json:"updated_at"`
-	DeletedAt      gorm.DeletedAt `gorm:"index" json:"-"`
+	// Health check: when set, CLI/automation can probe the URL and update Status.
+	HealthCheckURL            string      `gorm:"type:text" json:"health_check_url,omitempty"`
+	HealthCheckMethod         string      `gorm:"type:text" json:"health_check_method,omitempty"`          // default GET
+	HealthCheckHeaders        types.JSONB `gorm:"type:jsonb" json:"health_check_headers,omitempty"`       // map of header name -> value
+	HealthCheckExpectedStatus int         `gorm:"type:int" json:"health_check_expected_status,omitempty"` // default 200
+	CreatedAt                 time.Time  `json:"created_at"`
+	UpdatedAt                 time.Time  `json:"updated_at"`
+	DeletedAt                 gorm.DeletedAt `gorm:"index" json:"-"`
 
 	Organization interface{} `gorm:"-" json:"-"`
 	Environment  interface{} `gorm:"-" json:"-"`

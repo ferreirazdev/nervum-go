@@ -6,6 +6,7 @@ This folder is the index for architecture, runbooks, and contributing guides. Fo
 
 - **[architecture.md](architecture.md)** – Backend layout, request flow, auth/sessions, multi-tenant and environment access.
 - **[contributing.md](contributing.md)** – How to set up, run tests, and add a new feature.
+- **[HEALTHCHECK.md](HEALTHCHECK.md)** – Health check automation runbook: CLI env vars, server config, cron example, exit codes.
 
 ## Other references
 

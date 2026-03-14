@@ -13,6 +13,7 @@ import (
 const (
 	ProviderGitHub = "github"
 	ProviderGCloud = "gcloud"
+	ProviderSentry = "sentry"
 )
 
 // Integration stores OAuth tokens and metadata for one provider per organization.

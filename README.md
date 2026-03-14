@@ -101,7 +101,7 @@ For full request/response schemas, status codes, and auth, see the [OpenAPI spec
 These endpoints back the main SaaS features (exact routes may evolve over time; check the code or OpenAPI spec for the latest definitions):
 
 - **Health**
-  - `GET /health`
+  - `GET /health` — Returns 200 with `{ "status": "ok", "database": "ok" }` when the API and database are healthy. Returns 503 with `{ "status": "unhealthy", "database": "unreachable" }` when the DB ping fails (suitable for load balancer or Kubernetes readiness probes).
 
 - **Auth** (public: login, register; protected: logout, me)
   - `POST /api/v1/auth/register`, `POST /api/v1/auth/login` (rate-limited)
@@ -134,6 +134,7 @@ These endpoints back the main SaaS features (exact routes may evolve over time; 
 
 - **Entities**
   - `POST/GET/PUT/DELETE /api/v1/entities` (query: `organization_id`, optional `environment_id`)
+  - `GET /api/v1/entities/with-health-check` (query: optional `environment_id`) — list entities that have a health check URL configured (for CLI/automation)
 
 - **Relationships**
   - `POST/GET/PUT/DELETE /api/v1/relationships` (query: `organization_id`)
@@ -158,7 +159,7 @@ These endpoints back the main SaaS features (exact routes may evolve over time; 
 - **organizations** — id (UUID), name, timestamps
 - **users** — id, email (unique), name, role (admin/member), timestamps
 - **environments** — id, organization_id, name (prod/staging/dev), created_at
-- **entities** — id, organization_id, environment_id, type, name, status, owner_team_id, metadata (JSONB), timestamps
+- **entities** — id, organization_id, environment_id, type, name, status, owner_team_id, metadata (JSONB), health_check_url, health_check_method, health_check_headers (JSONB), health_check_expected_status, timestamps
 - **relationships** — id, organization_id, from_entity_id, to_entity_id, type, metadata (JSONB), created_at
 - **user_environment_access** — id, user_id, environment_id, role, created_at; UNIQUE(user_id, environment_id)
 
@@ -166,6 +167,37 @@ This structure lets you run Nervum as:
 
 - A **single-tenant internal tool** (one organization) or
 - A **multi-tenant SaaS** (multiple organizations with isolated data).
+
+---
+
+## Health check automation
+
+Entities can have an optional **health check** configuration (URL, method, headers, expected HTTP status). A CLI binary runs on a schedule, probes each configured endpoint, and updates the entity’s status to `healthy` or `critical` based on the result.
+
+- **Configure in the UI**: When adding or editing a component (entity) on the map, open the “Health check (automation)” section and set the URL (and optionally method, headers, expected status).
+- **Run the checker**: Use the `healthcheck` CLI with API URL and service token. See [docs/HEALTHCHECK.md](docs/HEALTHCHECK.md) for env vars, cron example, and exit code behavior.
+
+**Server (API)** — optional env for Bearer-token (CLI) auth:
+
+- `NERVUM_SERVICE_TOKEN` — shared secret; when `Authorization: Bearer <token>` matches, the request is authenticated.
+- `NERVUM_SERVICE_USER_ID` — UUID of an existing user (in the desired org) to act as when using the service token. That user must have `organization_id` set.
+
+**CLI** — build and run. Two modes:
+
+- **API mode** (CLI calls the API; use from any host): set `NERVUM_API_URL` and `NERVUM_SERVICE_TOKEN`.
+- **DB mode** (CLI connects to Postgres directly; no token): set `DB_*` env vars (same as the API). `NERVUM_ORGANIZATION_ID` is optional — when unset, all entities with a health check (all orgs) are checked; when set, scope to that org.
+
+```bash
+go build -o healthcheck ./cmd/healthcheck
+# API mode:
+NERVUM_API_URL=http://localhost:8080 NERVUM_SERVICE_TOKEN=your-secret ./healthcheck
+# DB mode, global (all orgs):
+DB_HOST=localhost DB_NAME=nervum DB_USER=postgres DB_PASSWORD=postgres ./healthcheck
+# DB mode, scoped to one org (optional):
+DB_HOST=localhost DB_NAME=nervum DB_USER=postgres DB_PASSWORD=postgres NERVUM_ORGANIZATION_ID=<org-uuid> ./healthcheck
+```
+
+Optional: `NERVUM_ENVIRONMENT_ID` or `-env <uuid>` to scope checks to one environment. Exit code: 0 if all checks passed, 1 if any failed.
 
 ---
 

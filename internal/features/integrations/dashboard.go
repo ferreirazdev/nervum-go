@@ -75,6 +75,27 @@ type (
 		Status string  `json:"status"`
 		Detail *string `json:"detail,omitempty"`
 	}
+	dashboardSentryIssue struct {
+		ID       string `json:"id"`
+		Title    string `json:"title"`
+		Level    string `json:"level"`
+		Project  string `json:"project"`
+		Count    string `json:"count"`
+		LastSeen string `json:"last_seen"`
+	}
+	dashboardSentryStats struct {
+		TotalIssues      int `json:"total_issues"`
+		UnresolvedIssues int `json:"unresolved_issues"`
+		ProjectCount     int `json:"project_count"`
+	}
+	dashboardSentryRelease struct {
+		ID            string   `json:"id"`
+		Version       string   `json:"version"`
+		Project       string   `json:"project"`
+		CrashFreeRate *float64 `json:"crash_free_rate,omitempty"`
+		NewIssues     int      `json:"new_issues"`
+		CreatedAt     string   `json:"created_at"`
+	}
 )
 
 // DashboardHandler serves dashboard proxy endpoints for GitHub and GCloud data.
@@ -117,6 +138,10 @@ func (h *DashboardHandler) Register(r *gin.RouterGroup) {
 	computeGroup.POST("/instances/:zone/:instanceName/stop", h.GCloudComputeInstanceStop)
 	computeGroup.GET("/instances/:zone/:instanceName", h.GCloudComputeInstanceGet)
 	computeGroup.GET("/instances", h.GCloudComputeInstancesList)
+	// Sentry proxy
+	g.GET("/sentry/issues", h.SentryIssues)
+	g.GET("/sentry/stats", h.SentryStats)
+	g.GET("/sentry/releases", h.SentryReleases)
 }
 
 func (h *DashboardHandler) requireOrgMember(c *gin.Context) (*user.User, uuid.UUID, bool) {
@@ -1361,4 +1386,211 @@ func (h *DashboardHandler) GCloudComputeInstanceStop(c *gin.Context) {
 		return
 	}
 	c.Data(resp.StatusCode, "application/json", body)
+}
+
+// ─── Sentry proxy ─────────────────────────────────────────────────────────────
+
+// sentryIssueAPI is the minimal shape returned by Sentry's issues endpoint.
+type sentryIssueAPI struct {
+	ID       string `json:"id"`
+	Title    string `json:"title"`
+	Level    string `json:"level"`
+	Count    string `json:"count"`
+	LastSeen string `json:"lastSeen"`
+	Status   string `json:"status"`
+	Project  struct {
+		Slug string `json:"slug"`
+		Name string `json:"name"`
+	} `json:"project"`
+}
+
+// sentryReleaseAPI is the minimal shape returned by Sentry's releases endpoint.
+type sentryReleaseAPI struct {
+	Version     string  `json:"version"`
+	DateCreated string  `json:"dateCreated"`
+	NewGroups   int     `json:"newGroups"`
+	Projects    []struct {
+		Slug string `json:"slug"`
+		Name string `json:"name"`
+	} `json:"projects"`
+	CrashFreeSessions *float64 `json:"crashFreeSessions"`
+}
+
+func sentryOrgSlug(meta []byte) string {
+	var m map[string]string
+	if err := json.Unmarshal(meta, &m); err != nil {
+		return ""
+	}
+	return m["org_slug"]
+}
+
+func sentryProjectSlug(meta []byte) string {
+	var m map[string]string
+	if err := json.Unmarshal(meta, &m); err != nil {
+		return ""
+	}
+	return m["project_slug"]
+}
+
+func (h *DashboardHandler) sentryRequest(c *gin.Context, token, apiURL string) ([]byte, bool) {
+	req, err := http.NewRequestWithContext(c.Request.Context(), "GET", apiURL, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build Sentry request"})
+		return nil, false
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to reach Sentry API"})
+		return nil, false
+	}
+	defer resp.Body.Close()
+	data, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		c.JSON(resp.StatusCode, gin.H{"error": "Sentry API error"})
+		return nil, false
+	}
+	return data, true
+}
+
+func (h *DashboardHandler) SentryIssues(c *gin.Context) {
+	_, orgID, ok := h.requireOrgMember(c)
+	if !ok {
+		return
+	}
+	integ, token, ok := h.loadIntegration(c, orgID, ProviderSentry)
+	if !ok {
+		return
+	}
+	orgSlug := sentryOrgSlug(integ.Metadata)
+	if orgSlug == "" {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "sentry org_slug not configured"})
+		return
+	}
+	params := url.Values{}
+	params.Set("limit", "25")
+	params.Set("query", "is:unresolved")
+	if ps := sentryProjectSlug(integ.Metadata); ps != "" {
+		params.Set("project", ps)
+	}
+	apiURL := "https://sentry.io/api/0/organizations/" + url.PathEscape(orgSlug) + "/issues/?" + params.Encode()
+	data, ok := h.sentryRequest(c, token, apiURL)
+	if !ok {
+		return
+	}
+	var raw []sentryIssueAPI
+	if err := json.Unmarshal(data, &raw); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to parse Sentry response"})
+		return
+	}
+	out := make([]dashboardSentryIssue, 0, len(raw))
+	for _, i := range raw {
+		out = append(out, dashboardSentryIssue{
+			ID:       i.ID,
+			Title:    i.Title,
+			Level:    i.Level,
+			Project:  i.Project.Slug,
+			Count:    i.Count,
+			LastSeen: i.LastSeen,
+		})
+	}
+	c.JSON(http.StatusOK, out)
+}
+
+func (h *DashboardHandler) SentryStats(c *gin.Context) {
+	_, orgID, ok := h.requireOrgMember(c)
+	if !ok {
+		return
+	}
+	integ, token, ok := h.loadIntegration(c, orgID, ProviderSentry)
+	if !ok {
+		return
+	}
+	orgSlug := sentryOrgSlug(integ.Metadata)
+	if orgSlug == "" {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "sentry org_slug not configured"})
+		return
+	}
+	params := url.Values{}
+	params.Set("limit", "100")
+	if ps := sentryProjectSlug(integ.Metadata); ps != "" {
+		params.Set("project", ps)
+	}
+	apiURL := "https://sentry.io/api/0/organizations/" + url.PathEscape(orgSlug) + "/issues/?" + params.Encode()
+	data, ok := h.sentryRequest(c, token, apiURL)
+	if !ok {
+		return
+	}
+	var raw []sentryIssueAPI
+	if err := json.Unmarshal(data, &raw); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to parse Sentry response"})
+		return
+	}
+	unresolved := 0
+	projects := map[string]struct{}{}
+	for _, i := range raw {
+		if i.Status == "unresolved" {
+			unresolved++
+		}
+		if i.Project.Slug != "" {
+			projects[i.Project.Slug] = struct{}{}
+		}
+	}
+	c.JSON(http.StatusOK, dashboardSentryStats{
+		TotalIssues:      len(raw),
+		UnresolvedIssues: unresolved,
+		ProjectCount:     len(projects),
+	})
+}
+
+func (h *DashboardHandler) SentryReleases(c *gin.Context) {
+	_, orgID, ok := h.requireOrgMember(c)
+	if !ok {
+		return
+	}
+	integ, token, ok := h.loadIntegration(c, orgID, ProviderSentry)
+	if !ok {
+		return
+	}
+	orgSlug := sentryOrgSlug(integ.Metadata)
+	if orgSlug == "" {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "sentry org_slug not configured"})
+		return
+	}
+	params := url.Values{}
+	params.Set("limit", "10")
+	if ps := sentryProjectSlug(integ.Metadata); ps != "" {
+		params.Set("project", ps)
+	}
+	apiURL := "https://sentry.io/api/0/organizations/" + url.PathEscape(orgSlug) + "/releases/?" + params.Encode()
+	data, ok := h.sentryRequest(c, token, apiURL)
+	if !ok {
+		return
+	}
+	var raw []sentryReleaseAPI
+	if err := json.Unmarshal(data, &raw); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to parse Sentry response"})
+		return
+	}
+	out := make([]dashboardSentryRelease, 0, len(raw))
+	for _, r := range raw {
+		project := ""
+		if len(r.Projects) > 0 {
+			project = r.Projects[0].Slug
+		}
+		var crashFree *float64
+		if r.CrashFreeSessions != nil {
+			v := *r.CrashFreeSessions * 100
+			crashFree = &v
+		}
+		out = append(out, dashboardSentryRelease{
+			ID:            r.Version,
+			Version:       r.Version,
+			Project:       project,
+			CrashFreeRate: crashFree,
+			NewIssues:     r.NewGroups,
+			CreatedAt:     r.DateCreated,
+		})
+	}
+	c.JSON(http.StatusOK, out)
 }

@@ -48,6 +48,7 @@ func (h *Handler) Register(r *gin.RouterGroup) {
 	g.DELETE("/:id", h.Delete)
 	g.GET("/github/connect", h.GitHubConnect)
 	g.GET("/gcloud/connect", h.GCloudConnect)
+	g.POST("/sentry/connect", h.SentryConnect)
 }
 
 // RegisterPublic registers callback routes without auth (state binds to org).
@@ -351,10 +352,10 @@ func (h *Handler) GitHubCallback(c *gin.Context) {
 	} else {
 		integ := &Integration{
 			OrganizationID: orgID,
-			Provider:      ProviderGitHub,
-			AccessToken:   encAccess,
-			Scopes:        tok.Scope,
-			ConnectedAt:   now,
+			Provider:       ProviderGitHub,
+			AccessToken:    encAccess,
+			Scopes:         tok.Scope,
+			ConnectedAt:    now,
 		}
 		_ = h.repo.Create(c.Request.Context(), integ)
 	}
@@ -432,7 +433,7 @@ func (h *Handler) GCloudConnect(c *gin.Context) {
 // gcloudTokenResponse matches Google OAuth2 token response.
 type gcloudTokenResponse struct {
 	AccessToken  string `json:"access_token"`
-	RefreshToken  string `json:"refresh_token"`
+	RefreshToken string `json:"refresh_token"`
 	ExpiresIn    int    `json:"expires_in"`
 	TokenType    string `json:"token_type"`
 	Scope        string `json:"scope"`
@@ -516,4 +517,128 @@ func (h *Handler) GCloudCallback(c *gin.Context) {
 
 func redirectFail(frontendURL string, c *gin.Context, reason string) {
 	c.Redirect(http.StatusFound, frontendURL+"/integrations?error="+url.QueryEscape(reason))
+}
+
+// sentryConnectRequest is the body for POST /integrations/sentry/connect.
+type sentryConnectRequest struct {
+	Token       string `json:"token"`
+	OrgSlug     string `json:"org_slug"`
+	ProjectSlug string `json:"project_slug"`
+}
+
+// SentryConnect saves a Sentry Auth Token for the organization after validating it against the Sentry API.
+func (h *Handler) SentryConnect(c *gin.Context) {
+	u, ok := c.Get(auth.ContextUser)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
+		return
+	}
+	currentUser := u.(*user.User)
+
+	var body sentryConnectRequest
+	if err := c.ShouldBindJSON(&body); err != nil || body.Token == "" || body.OrgSlug == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "token and org_slug are required"})
+		return
+	}
+
+	if currentUser.OrganizationID == nil {
+		c.JSON(http.StatusForbidden, gin.H{"error": "user has no organization"})
+		return
+	}
+	orgID := *currentUser.OrganizationID
+
+	org, err := h.orgRepo.GetByID(c.Request.Context(), orgID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+	canEdit := user.CanEditOrganization(currentUser.Role) || (org.OwnerID != nil && *org.OwnerID == currentUser.ID)
+	if !canEdit {
+		c.JSON(http.StatusForbidden, gin.H{"error": "only organization owner or admin can connect integrations"})
+		return
+	}
+	if len(h.cfg.EncryptionKey) != 32 {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "integration encryption key is not configured"})
+		return
+	}
+
+	// Validate the token by calling the Sentry organizations endpoint.
+	validateURL := "https://sentry.io/api/0/organizations/" + url.PathEscape(body.OrgSlug) + "/"
+	req, err := http.NewRequestWithContext(c.Request.Context(), "GET", validateURL, nil)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to build validation request"})
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+body.Token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to reach Sentry API"})
+		return
+	}
+
+	defer resp.Body.Close()
+	if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "invalid Sentry token or organization slug"})
+		return
+	}
+	if resp.StatusCode != http.StatusOK {
+		c.JSON(http.StatusUnprocessableEntity, gin.H{"error": "Sentry API returned an error — check your token and organization slug"})
+		return
+	}
+
+	encToken, err := Encrypt(h.cfg.EncryptionKey, body.Token)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to store token"})
+		return
+	}
+
+	meta := map[string]string{"org_slug": body.OrgSlug}
+	if body.ProjectSlug != "" {
+		meta["project_slug"] = body.ProjectSlug
+	}
+	metaJSON, _ := json.Marshal(meta)
+
+	now := time.Now()
+	existing, _ := h.repo.GetByOrganizationAndProvider(c.Request.Context(), orgID, ProviderSentry)
+	if existing != nil {
+		existing.AccessToken = encToken
+		existing.Metadata = metaJSON
+		existing.ConnectedAt = now
+		existing.UpdatedAt = now
+		if err := h.repo.Update(c.Request.Context(), existing); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+			return
+		}
+		c.JSON(http.StatusOK, listResponse{
+			ID:             existing.ID.String(),
+			OrganizationID: existing.OrganizationID.String(),
+			Provider:       existing.Provider,
+			ConnectedAt:    existing.ConnectedAt,
+			Metadata:       metaJSON,
+			CreatedAt:      existing.CreatedAt,
+			UpdatedAt:      existing.UpdatedAt,
+		})
+		return
+	}
+
+	integ := &Integration{
+		OrganizationID: orgID,
+		Provider:       ProviderSentry,
+		AccessToken:    encToken,
+		Metadata:       metaJSON,
+		ConnectedAt:    now,
+	}
+	if err := h.repo.Create(c.Request.Context(), integ); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+	c.JSON(http.StatusCreated, listResponse{
+		ID:             integ.ID.String(),
+		OrganizationID: integ.OrganizationID.String(),
+		Provider:       integ.Provider,
+		ConnectedAt:    integ.ConnectedAt,
+		Metadata:       metaJSON,
+		CreatedAt:      integ.CreatedAt,
+		UpdatedAt:      integ.UpdatedAt,
+	})
 }

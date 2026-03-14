@@ -32,6 +32,10 @@ type IntegrationsConfig struct {
 type ServerConfig struct {
 	Port               int
 	CORSAllowedOrigins []string // from CORS_ALLOWED_ORIGINS (comma-separated); defaults to localhost:5173
+	// Service token auth for CLI/automation: when Authorization: Bearer <token> matches ServiceToken,
+	// request is treated as authenticated as ServiceUserID (UUID of an existing user in that org).
+	ServiceToken  string // NERVUM_SERVICE_TOKEN
+	ServiceUserID string // NERVUM_SERVICE_USER_ID (UUID)
 }
 
 // DatabaseConfig holds Postgres connection settings. Corresponds to env vars
@@ -80,6 +84,8 @@ func Load() *Config {
 		Server: ServerConfig{
 			Port:               port,
 			CORSAllowedOrigins: corsOrigins,
+			ServiceToken:       getEnv("NERVUM_SERVICE_TOKEN", ""),
+			ServiceUserID:      getEnv("NERVUM_SERVICE_USER_ID", ""),
 		},
 		Database: DatabaseConfig{
 			Host:     getEnv("DB_HOST", "localhost"),
