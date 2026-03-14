@@ -9,6 +9,7 @@ import (
 	integration "github.com/nervum/nervum-go/internal/features/integrations"
 	"github.com/nervum/nervum-go/internal/features/invitations"
 	"github.com/nervum/nervum-go/internal/features/organizations"
+	"github.com/nervum/nervum-go/internal/features/orgservices"
 	"github.com/nervum/nervum-go/internal/features/relationships"
 	"github.com/nervum/nervum-go/internal/features/repositories"
 	"github.com/nervum/nervum-go/internal/features/teams"
@@ -36,6 +37,7 @@ func AutoMigrate(db *gorm.DB) error {
 		&userenvironmentaccess.UserEnvironmentAccess{},
 		&integration.Integration{},
 		&repositories.OrganizationRepository{},
+		&orgservices.OrganizationService{},
 	); err != nil {
 		return err
 	}

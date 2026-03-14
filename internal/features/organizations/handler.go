@@ -44,7 +44,7 @@ func (h *Handler) Create(c *gin.Context) {
 	}
 	req.OwnerID = &currentUser.ID
 	if err := h.repo.Create(c.Request.Context(), &req); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	c.JSON(http.StatusCreated, req)
@@ -72,24 +72,39 @@ func (h *Handler) GetByID(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	canView := user.CanViewOrganization(currentUser.Role) || (o.OwnerID != nil && *o.OwnerID == currentUser.ID)
 	if !canView {
-		c.JSON(http.StatusForbidden, gin.H{"error": "cannot view organization"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
 	c.JSON(http.StatusOK, o)
 }
 
+// List returns only the organization the authenticated user belongs to.
 func (h *Handler) List(c *gin.Context) {
-	list, err := h.repo.List(c.Request.Context())
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	u, ok := c.Get(contextUserKey)
+	if !ok {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "authentication required"})
 		return
 	}
-	c.JSON(http.StatusOK, list)
+	currentUser := u.(*user.User)
+	if currentUser.OrganizationID == nil {
+		c.JSON(http.StatusOK, []Organization{})
+		return
+	}
+	o, err := h.repo.GetByID(c.Request.Context(), *currentUser.OrganizationID)
+	if err != nil {
+		if err == gorm.ErrRecordNotFound {
+			c.JSON(http.StatusOK, []Organization{})
+			return
+		}
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
+		return
+	}
+	c.JSON(http.StatusOK, []Organization{*o})
 }
 
 func (h *Handler) Update(c *gin.Context) {
@@ -114,12 +129,12 @@ func (h *Handler) Update(c *gin.Context) {
 			c.JSON(http.StatusNotFound, gin.H{"error": "not found"})
 			return
 		}
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	canEdit := user.CanEditOrganization(currentUser.Role) || (o.OwnerID != nil && *o.OwnerID == currentUser.ID)
 	if !canEdit {
-		c.JSON(http.StatusForbidden, gin.H{"error": "cannot edit organization"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
 	var req struct {
@@ -141,7 +156,7 @@ func (h *Handler) Update(c *gin.Context) {
 		o.Website = *req.Website
 	}
 	if err := h.repo.Update(c.Request.Context(), o); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	c.JSON(http.StatusOK, o)
@@ -167,11 +182,11 @@ func (h *Handler) Delete(c *gin.Context) {
 	if o != nil && (user.CanEditOrganization(currentUser.Role) || (o.OwnerID != nil && *o.OwnerID == currentUser.ID)) {
 		// allow delete
 	} else {
-		c.JSON(http.StatusForbidden, gin.H{"error": "cannot delete organization"})
+		c.JSON(http.StatusForbidden, gin.H{"error": "forbidden"})
 		return
 	}
 	if err := h.repo.Delete(c.Request.Context(), id); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "internal error"})
 		return
 	}
 	c.Status(http.StatusNoContent)

@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	sessionDuration = 7 * 24 * time.Hour
+	sessionDuration = 24 * time.Hour
 	bcryptCost      = 12
 )
 
@@ -30,10 +30,14 @@ func NewHandler(sessionRepo SessionRepository, userRepo user.Repository, orgRepo
 	return &Handler{sessionRepo: sessionRepo, userRepo: userRepo, orgRepo: orgRepo}
 }
 
-func (h *Handler) Register(r *gin.RouterGroup) {
+// Register mounts auth routes under /auth. sensitiveMiddleware is applied to
+// login and register (e.g. rate limiting) but not to logout or me.
+func (h *Handler) Register(r *gin.RouterGroup, sensitiveMiddleware ...gin.HandlerFunc) {
 	g := r.Group("/auth")
-	g.POST("/register", h.RegisterUser)
-	g.POST("/login", h.Login)
+	loginHandlers := append(sensitiveMiddleware, h.Login)
+	registerHandlers := append(sensitiveMiddleware, h.RegisterUser)
+	g.POST("/register", registerHandlers...)
+	g.POST("/login", loginHandlers...)
 	g.POST("/logout", h.Logout)
 	g.GET("/me", RequireAuth(h.sessionRepo, h.userRepo), h.Me)
 }
@@ -146,10 +150,10 @@ func (h *Handler) Me(c *gin.Context) {
 
 func setSessionCookie(c *gin.Context, token string) {
 	c.SetSameSite(http.SameSiteStrictMode)
-	c.SetCookie(CookieName, token, int(sessionDuration.Seconds()), "/", "", false, true)
+	c.SetCookie(CookieName, token, int(sessionDuration.Seconds()), "/", "", true, true)
 }
 
 func clearSessionCookie(c *gin.Context) {
 	c.SetSameSite(http.SameSiteStrictMode)
-	c.SetCookie(CookieName, "", -1, "/", "", false, true)
+	c.SetCookie(CookieName, "", -1, "/", "", true, true)
 }

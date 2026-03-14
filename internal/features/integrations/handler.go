@@ -486,21 +486,24 @@ func (h *Handler) GCloudCallback(c *gin.Context) {
 	}
 	existing, _ := h.repo.GetByOrganizationAndProvider(c.Request.Context(), orgID, ProviderGCloud)
 	now := time.Now()
+	expiresAt := now.Add(time.Duration(tok.ExpiresIn) * time.Second)
 	if existing != nil {
 		existing.AccessToken = encAccess
 		existing.RefreshToken = encRefresh
+		existing.AccessTokenExpiresAt = expiresAt
 		existing.Scopes = tok.Scope
 		existing.ConnectedAt = now
 		existing.UpdatedAt = now
 		_ = h.repo.Update(c.Request.Context(), existing)
 	} else {
 		integ := &Integration{
-			OrganizationID: orgID,
-			Provider:       ProviderGCloud,
-			AccessToken:    encAccess,
-			RefreshToken:   encRefresh,
-			Scopes:         tok.Scope,
-			ConnectedAt:    now,
+			OrganizationID:       orgID,
+			Provider:             ProviderGCloud,
+			AccessToken:          encAccess,
+			RefreshToken:         encRefresh,
+			AccessTokenExpiresAt: expiresAt,
+			Scopes:               tok.Scope,
+			ConnectedAt:          now,
 		}
 		_ = h.repo.Create(c.Request.Context(), integ)
 	}

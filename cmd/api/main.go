@@ -19,12 +19,15 @@ import (
 	"github.com/nervum/nervum-go/internal/features/integrations"
 	"github.com/nervum/nervum-go/internal/features/invitations"
 	"github.com/nervum/nervum-go/internal/features/organizations"
+	"github.com/nervum/nervum-go/internal/features/orgservices"
 	"github.com/nervum/nervum-go/internal/features/relationships"
 	"github.com/nervum/nervum-go/internal/features/repositories"
 	"github.com/nervum/nervum-go/internal/features/teams"
 	"github.com/nervum/nervum-go/internal/features/user_environment_access"
 	"github.com/nervum/nervum-go/internal/features/user_teams"
 	"github.com/nervum/nervum-go/internal/features/users"
+	"github.com/nervum/nervum-go/internal/pkg/ratelimit"
+	"github.com/nervum/nervum-go/internal/pkg/secureheaders"
 )
 
 func main() {
@@ -43,8 +46,9 @@ func main() {
 
 	r := gin.Default()
 
+	r.Use(secureheaders.Middleware())
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"http://localhost:5173"},
+		AllowOrigins:     cfg.Server.CORSAllowedOrigins,
 		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type", "Accept"},
 		ExposeHeaders:    []string{"Content-Length"},
@@ -62,8 +66,9 @@ func main() {
 
 	api := r.Group("/api/v1")
 
-	// Public auth routes
-	auth.NewHandler(sessionRepo, userRepo, orgRepo).Register(api)
+	// Public auth routes — login and register are rate-limited (5 attempts/minute per IP).
+	authRateLimit := ratelimit.IPRateLimit(5, time.Minute)
+	auth.NewHandler(sessionRepo, userRepo, orgRepo).Register(api, authRateLimit)
 
 	// Protected routes
 	protected := api.Group("")
@@ -79,10 +84,11 @@ func main() {
 	invHandler := invitation.NewHandler(invitationRepo, userRepo, orgRepo, userTeamRepo, userEnvAccessRepo, sessionRepo)
 	invHandler.Register(protected)
 	invHandler.RegisterPublic(api)
-	environment.NewHandler(environment.NewRepository(db), entityRepo).Register(protected)
+	envRepo := environment.NewRepository(db)
+	environment.NewHandler(envRepo, entityRepo).Register(protected)
 	entity.NewHandler(entityRepo).Register(protected)
 	relationship.NewHandler(relationship.NewRepository(db)).Register(protected)
-	userenvironmentaccess.NewHandler(userenvironmentaccess.NewRepository(db)).Register(protected)
+	userenvironmentaccess.NewHandler(userEnvAccessRepo, envRepo).Register(protected)
 	integrationRepo := integrations.NewRepository(db)
 	integHandler := integrations.NewHandler(integrationRepo, orgRepo, &cfg.Integrations)
 	integHandler.Register(protected)
@@ -91,6 +97,8 @@ func main() {
 	dashboardHandler.Register(protected.Group("/organizations"))
 	repositoriesHandler := repositories.NewHandler(repositories.NewRepository(db))
 	repositoriesHandler.Register(protected.Group("/organizations"))
+	orgservicesHandler := orgservices.NewHandler(orgservices.NewRepository(db))
+	orgservicesHandler.Register(protected.Group("/organizations"))
 
 	addr := ":" + fmt.Sprint(cfg.Server.Port)
 	log.Printf("listening on %s", addr)

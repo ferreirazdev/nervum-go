@@ -374,5 +374,5 @@ func (h *Handler) Accept(c *gin.Context) {
 
 func setSessionCookie(c *gin.Context, token string) {
 	c.SetSameSite(http.SameSiteStrictMode)
-	c.SetCookie(auth.CookieName, token, int(sessionDuration.Seconds()), "/", "", false, true)
+	c.SetCookie(auth.CookieName, token, int(sessionDuration.Seconds()), "/", "", true, true)
 }

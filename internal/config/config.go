@@ -7,13 +7,14 @@ import (
 	"encoding/hex"
 	"os"
 	"strconv"
+	"strings"
 )
 
 // Config holds server and database configuration loaded from the environment.
 type Config struct {
-	Server        ServerConfig
-	Database      DatabaseConfig
-	Integrations  IntegrationsConfig
+	Server       ServerConfig
+	Database     DatabaseConfig
+	Integrations IntegrationsConfig
 }
 
 // IntegrationsConfig holds OAuth and encryption settings for org integrations.
@@ -27,9 +28,10 @@ type IntegrationsConfig struct {
 	GoogleClientSecret string
 }
 
-// ServerConfig holds HTTP server settings (e.g. port).
+// ServerConfig holds HTTP server settings.
 type ServerConfig struct {
-	Port int
+	Port               int
+	CORSAllowedOrigins []string // from CORS_ALLOWED_ORIGINS (comma-separated); defaults to localhost:5173
 }
 
 // DatabaseConfig holds Postgres connection settings. Corresponds to env vars
@@ -48,6 +50,14 @@ type DatabaseConfig struct {
 func Load() *Config {
 	port, _ := strconv.Atoi(getEnv("PORT", "8080"))
 	dbPort, _ := strconv.Atoi(getEnv("DB_PORT", "5432"))
+
+	corsOrigins := []string{"http://localhost:5173"}
+	if raw := os.Getenv("CORS_ALLOWED_ORIGINS"); raw != "" {
+		corsOrigins = strings.Split(raw, ",")
+		for i, o := range corsOrigins {
+			corsOrigins[i] = strings.TrimSpace(o)
+		}
+	}
 
 	integrations := IntegrationsConfig{
 		FrontendURL:        getEnv("FRONTEND_URL", "http://localhost:5173"),
@@ -68,7 +78,8 @@ func Load() *Config {
 
 	return &Config{
 		Server: ServerConfig{
-			Port: port,
+			Port:               port,
+			CORSAllowedOrigins: corsOrigins,
 		},
 		Database: DatabaseConfig{
 			Host:     getEnv("DB_HOST", "localhost"),
