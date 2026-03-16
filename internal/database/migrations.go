@@ -35,7 +35,8 @@ func RunMigrations(db *sql.DB) error {
 	if err != nil {
 		return err
 	}
-	defer m.Close()
+	// Do NOT call m.Close() — the golang-migrate postgres driver calls db.Close()
+	// on the shared *sql.DB, which would invalidate GORM's connection pool.
 	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
 		return fmt.Errorf("migrate up: %w", err)
 	}
