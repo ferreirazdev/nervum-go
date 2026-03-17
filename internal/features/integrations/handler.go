@@ -490,7 +490,9 @@ func (h *Handler) GCloudCallback(c *gin.Context) {
 	expiresAt := now.Add(time.Duration(tok.ExpiresIn) * time.Second)
 	if existing != nil {
 		existing.AccessToken = encAccess
-		existing.RefreshToken = encRefresh
+		if tok.RefreshToken != "" {
+			existing.RefreshToken = encRefresh
+		}
 		existing.AccessTokenExpiresAt = expiresAt
 		existing.Scopes = tok.Scope
 		existing.ConnectedAt = now

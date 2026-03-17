@@ -534,22 +534,6 @@ func (h *DashboardHandler) gcpProjectID(c *gin.Context, integ *Integration) (str
 	return meta.ProjectID, true
 }
 
-// gcpRegion returns the Cloud Run region from integration metadata, or "us-central1" if unset.
-func (h *DashboardHandler) gcpRegion(integ *Integration) string {
-	if len(integ.Metadata) == 0 {
-		return "us-central1"
-	}
-	var meta struct {
-		Region string `json:"region"`
-	}
-	if err := json.Unmarshal(integ.Metadata, &meta); err != nil {
-		return "us-central1"
-	}
-	if meta.Region == "" {
-		return "us-central1"
-	}
-	return meta.Region
-}
 
 // gcpErrorMessage builds a user-facing error string for GCP API non-OK responses.
 func gcpErrorMessage(apiName string, statusCode int, body []byte) string {
@@ -644,25 +628,6 @@ func (h *DashboardHandler) GCloudBuilds(c *gin.Context) {
 	c.JSON(http.StatusOK, out)
 }
 
-// Cloud Run: list services and revisions (simplified)
-type gcpRunService struct {
-	Name     string `json:"name"`
-	Metadata struct {
-		Annotations *struct {
-			RunRegion string `json:"run.googleapis.com/location"`
-		} `json:"annotations"`
-	} `json:"metadata"`
-	Status *struct {
-		Conditions []struct {
-			Type   string `json:"type"`
-			Status string `json:"status"`
-		} `json:"conditions"`
-	} `json:"status"`
-}
-
-type gcpRunServiceList struct {
-	Items []gcpRunService `json:"items"`
-}
 
 func (h *DashboardHandler) GCloudDeploys(c *gin.Context) {
 	_, orgID, ok := h.requireOrgMember(c)
@@ -677,45 +642,39 @@ func (h *DashboardHandler) GCloudDeploys(c *gin.Context) {
 	if !ok {
 		return
 	}
-	location := h.gcpRegion(integ)
-	url := "https://run.googleapis.com/v1/projects/" + projectID + "/locations/" + location + "/services"
-	req, _ := http.NewRequestWithContext(c.Request.Context(), "GET", url, nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to call Cloud Run API"})
-		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 500))
-		msg := gcpErrorMessage("Cloud Run API", resp.StatusCode, body)
-		c.JSON(resp.StatusCode, gin.H{"error": msg})
-		return
-	}
-	var list gcpRunServiceList
-	if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to parse response"})
-		return
-	}
-	out := make([]dashboardGCloudDeploy, 0)
-	for i, svc := range list.Items {
-		name := svc.Name
-		if idx := strings.LastIndex(name, "/"); idx >= 0 {
-			name = name[idx+1:]
+	var allServices []gcpRunV2Service
+	for _, region := range cloudRunV2Regions {
+		reqURL := "https://run.googleapis.com/v2/projects/" + projectID + "/locations/" + region + "/services?pageSize=100"
+		req, _ := http.NewRequestWithContext(c.Request.Context(), "GET", reqURL, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			continue
 		}
-		region := location
-		if svc.Metadata.Annotations != nil {
-			region = svc.Metadata.Annotations.RunRegion
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			continue
 		}
+		var page gcpRunV2ServicePagedList
+		if err := json.Unmarshal(body, &page); err != nil {
+			continue
+		}
+		allServices = append(allServices, page.Services...)
+	}
+	out := make([]dashboardGCloudDeploy, 0, len(allServices))
+	for i, svc := range allServices {
+		region, name := parseCloudRunV2ServiceName(svc.Name)
 		status := "active"
-		if svc.Status != nil && len(svc.Status.Conditions) > 0 {
-			for _, c := range svc.Status.Conditions {
-				if c.Type == "Ready" && c.Status != "True" {
-					status = "deploying"
-					break
-				}
+		for _, cond := range svc.Conditions {
+			if cond.Type == "Ready" && cond.Status != "True" {
+				status = "deploying"
+				break
 			}
+		}
+		createdAt := svc.UpdateTime
+		if createdAt == "" {
+			createdAt = time.Now().UTC().Format(time.RFC3339)
 		}
 		out = append(out, dashboardGCloudDeploy{
 			ID:          "gcd-" + strconv.Itoa(i+1),
@@ -723,7 +682,7 @@ func (h *DashboardHandler) GCloudDeploys(c *gin.Context) {
 			Revision:    name + "-00001",
 			Status:      status,
 			Region:      region,
-			CreatedAt:   time.Now().UTC().Format(time.RFC3339),
+			CreatedAt:   createdAt,
 		})
 	}
 	c.JSON(http.StatusOK, out)
@@ -831,40 +790,34 @@ func (h *DashboardHandler) GCloudServicesHealth(c *gin.Context) {
 	if !ok {
 		return
 	}
-	location := h.gcpRegion(integ)
-	url := "https://run.googleapis.com/v1/projects/" + projectID + "/locations/" + location + "/services"
-	req, _ := http.NewRequestWithContext(c.Request.Context(), "GET", url, nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to call Cloud Run API"})
-		return
-	}
-	defer resp.Body.Close()
-	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(io.LimitReader(resp.Body, 500))
-		msg := gcpErrorMessage("Cloud Run API", resp.StatusCode, body)
-		c.JSON(resp.StatusCode, gin.H{"error": msg})
-		return
-	}
-	var list gcpRunServiceList
-	if err := json.NewDecoder(resp.Body).Decode(&list); err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to parse response"})
-		return
-	}
-	out := make([]dashboardGCloudServiceHealth, 0, len(list.Items))
-	for i, svc := range list.Items {
-		name := svc.Name
-		if idx := strings.LastIndex(name, "/"); idx >= 0 {
-			name = name[idx+1:]
+	var allServices []gcpRunV2Service
+	for _, region := range cloudRunV2Regions {
+		reqURL := "https://run.googleapis.com/v2/projects/" + projectID + "/locations/" + region + "/services?pageSize=100"
+		req, _ := http.NewRequestWithContext(c.Request.Context(), "GET", reqURL, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			continue
 		}
+		body, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			continue
+		}
+		var page gcpRunV2ServicePagedList
+		if err := json.Unmarshal(body, &page); err != nil {
+			continue
+		}
+		allServices = append(allServices, page.Services...)
+	}
+	out := make([]dashboardGCloudServiceHealth, 0, len(allServices))
+	for i, svc := range allServices {
+		_, name := parseCloudRunV2ServiceName(svc.Name)
 		status := "healthy"
-		if svc.Status != nil && len(svc.Status.Conditions) > 0 {
-			for _, c := range svc.Status.Conditions {
-				if c.Type == "Ready" && c.Status != "True" {
-					status = "degraded"
-					break
-				}
+		for _, cond := range svc.Conditions {
+			if cond.Type == "Ready" && cond.Status != "True" {
+				status = "degraded"
+				break
 			}
 		}
 		detail := "All instances serving"
@@ -895,6 +848,21 @@ type gcpRunV2ListResponse struct {
 	Services      []json.RawMessage `json:"services"`
 	NextPageToken string            `json:"nextPageToken"`
 	Unreachable   []string          `json:"unreachable"`
+}
+
+// gcpRunV2Service is a minimal typed view of a Cloud Run v2 service for dashboard use.
+type gcpRunV2Service struct {
+	Name       string `json:"name"`
+	UpdateTime string `json:"updateTime"`
+	Conditions []struct {
+		Type   string `json:"type"`
+		Status string `json:"status"`
+	} `json:"conditions"`
+}
+
+// gcpRunV2ServicePagedList is the typed list response used by deploys/health fanout.
+type gcpRunV2ServicePagedList struct {
+	Services []gcpRunV2Service `json:"services"`
 }
 
 // GCloudV2ServicesList lists Cloud Run v2 services. If query "region" is set, lists only that region; otherwise lists all regions (first page per region).
