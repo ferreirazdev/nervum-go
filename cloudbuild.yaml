@@ -1,0 +1,53 @@
+substitutions:
+  _REGION: us-central1
+  _REPO: nervum
+  _SERVICE: nervum-api
+  _CLOUDSQL_INSTANCE: ${PROJECT_ID}:${_REGION}:nervum-db
+  _SA: nervum-api@${PROJECT_ID}.iam.gserviceaccount.com
+
+steps:
+  - id: build
+    name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/api:${SHORT_SHA}
+      - -t
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/api:latest
+      - .
+
+  - id: push
+    name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - --all-tags
+      - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/api
+    waitFor: [build]
+
+  - id: deploy
+    name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/api:${SHORT_SHA}
+      - --region=${_REGION}
+      - --platform=managed
+      - --service-account=${_SA}
+      - --add-cloudsql-instances=${_CLOUDSQL_INSTANCE}
+      - --set-env-vars=DB_HOST=/cloudsql/${_CLOUDSQL_INSTANCE},DB_USER=nervum,DB_NAME=nervum,DB_SSLMODE=disable
+      - --set-secrets=DB_PASSWORD=nervum-db-password:latest,INTEGRATION_ENCRYPTION_KEY=nervum-encryption-key:latest,GITHUB_CLIENT_ID=nervum-github-client-id:latest,GITHUB_CLIENT_SECRET=nervum-github-client-secret:latest,CORS_ALLOWED_ORIGINS=nervum-cors-origins:latest,FRONTEND_URL=nervum-frontend-url:latest,API_BASE_URL=nervum-api-base-url:latest
+      - --allow-unauthenticated
+      - --port=8080
+      - --min-instances=0
+      - --max-instances=5
+      - --quiet
+    waitFor: [push]
+
+images:
+  - ${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/api:${SHORT_SHA}
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: E2_HIGHCPU_8
