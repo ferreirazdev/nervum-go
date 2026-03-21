@@ -1,0 +1,26 @@
+# Git and IDE
+.git
+.gitignore
+.cursor
+.idea
+.vscode
+
+# Local env and secrets (configure via Cloud Run env vars / Secret Manager)
+.env
+.env.*
+!.env.example
+
+# Tests and tooling (not needed for image build)
+*_test.go
+**/*_test.go
+
+# Docs and specs (large, unused at runtime)
+docs
+openapi
+
+# CI / misc
+coverage.out
+*.md
+Makefile
+cmd/healthcheck
+cmd/migrate
