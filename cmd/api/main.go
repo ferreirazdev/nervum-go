@@ -72,7 +72,7 @@ func main() {
 
 	// Public auth routes — login and register are rate-limited (5 attempts/minute per IP).
 	authRateLimit := ratelimit.IPRateLimit(5, time.Minute)
-	auth.NewHandler(sessionRepo, userRepo, orgRepo, cfg.Server.ServiceToken, cfg.Server.ServiceUserID).Register(api, authRateLimit)
+	auth.NewHandler(sessionRepo, userRepo, orgRepo, cfg.Server.ServiceToken, cfg.Server.ServiceUserID, cfg.Server.SessionCookieSameSite).Register(api, authRateLimit)
 
 	// Protected routes
 	protected := api.Group("")
@@ -85,7 +85,7 @@ func main() {
 	userteam.NewHandler(userTeamRepo).Register(protected)
 	invitationRepo := invitation.NewRepository(db)
 	userEnvAccessRepo := userenvironmentaccess.NewRepository(db)
-	invHandler := invitation.NewHandler(invitationRepo, userRepo, orgRepo, userTeamRepo, userEnvAccessRepo, sessionRepo)
+	invHandler := invitation.NewHandler(invitationRepo, userRepo, orgRepo, userTeamRepo, userEnvAccessRepo, sessionRepo, cfg.Server.SessionCookieSameSite)
 	invHandler.Register(protected)
 	invHandler.RegisterPublic(api)
 	envRepo := environment.NewRepository(db)

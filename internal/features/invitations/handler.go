@@ -25,12 +25,13 @@ const (
 
 // Handler serves invitation routes: create, list, delete (protected) and get-by-token, accept (public).
 type Handler struct {
-	repo          Repository
-	userRepo      user.Repository
-	orgRepo       organization.Repository
-	userTeamRepo  userteam.Repository
-	userEnvRepo   userenvironmentaccess.Repository
-	sessionRepo   auth.SessionRepository
+	repo                  Repository
+	userRepo              user.Repository
+	orgRepo               organization.Repository
+	userTeamRepo          userteam.Repository
+	userEnvRepo           userenvironmentaccess.Repository
+	sessionRepo           auth.SessionRepository
+	sessionCookieSameSite http.SameSite
 }
 
 // NewHandler returns an invitation Handler with the given repositories and session store.
@@ -41,10 +42,12 @@ func NewHandler(
 	userTeamRepo userteam.Repository,
 	userEnvRepo userenvironmentaccess.Repository,
 	sessionRepo auth.SessionRepository,
+	sessionCookieSameSite http.SameSite,
 ) *Handler {
 	return &Handler{
 		repo: repo, userRepo: userRepo, orgRepo: orgRepo,
 		userTeamRepo: userTeamRepo, userEnvRepo: userEnvRepo, sessionRepo: sessionRepo,
+		sessionCookieSameSite: sessionCookieSameSite,
 	}
 }
 
@@ -316,7 +319,7 @@ func (h *Handler) Accept(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create session"})
 			return
 		}
-		setSessionCookie(c, session.ID.String())
+		auth.SetSessionCookie(c, h.sessionCookieSameSite, session.ID.String(), sessionDuration)
 		c.JSON(http.StatusOK, existingUser)
 		return
 	}
@@ -368,11 +371,6 @@ func (h *Handler) Accept(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create session"})
 		return
 	}
-	setSessionCookie(c, session.ID.String())
+	auth.SetSessionCookie(c, h.sessionCookieSameSite, session.ID.String(), sessionDuration)
 	c.JSON(http.StatusCreated, newUser)
-}
-
-func setSessionCookie(c *gin.Context, token string) {
-	c.SetSameSite(http.SameSiteStrictMode)
-	c.SetCookie(auth.CookieName, token, int(sessionDuration.Seconds()), "/", "", true, true)
 }

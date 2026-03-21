@@ -5,6 +5,7 @@ package config
 import (
 	"encoding/base64"
 	"encoding/hex"
+	"net/http"
 	"os"
 	"strconv"
 	"strings"
@@ -30,8 +31,9 @@ type IntegrationsConfig struct {
 
 // ServerConfig holds HTTP server settings.
 type ServerConfig struct {
-	Port               int
-	CORSAllowedOrigins []string // from CORS_ALLOWED_ORIGINS (comma-separated); defaults to localhost:5173
+	Port                  int
+	SessionCookieSameSite http.SameSite // from SESSION_COOKIE_SAMESITE: strict (default), lax, none — use none for SPA on another origin
+	CORSAllowedOrigins    []string      // from CORS_ALLOWED_ORIGINS (comma-separated); defaults to localhost:5173
 	// Service token auth for CLI/automation: when Authorization: Bearer <token> matches ServiceToken,
 	// request is treated as authenticated as ServiceUserID (UUID of an existing user in that org).
 	ServiceToken  string // NERVUM_SERVICE_TOKEN
@@ -82,8 +84,9 @@ func Load() *Config {
 
 	return &Config{
 		Server: ServerConfig{
-			Port:               port,
-			CORSAllowedOrigins: corsOrigins,
+			Port:                  port,
+			SessionCookieSameSite: parseSessionCookieSameSite(getEnv("SESSION_COOKIE_SAMESITE", "strict")),
+			CORSAllowedOrigins:    corsOrigins,
 			ServiceToken:       getEnv("NERVUM_SERVICE_TOKEN", ""),
 			ServiceUserID:      getEnv("NERVUM_SERVICE_USER_ID", ""),
 		},
@@ -96,6 +99,17 @@ func Load() *Config {
 			SSLMode:  getEnv("DB_SSLMODE", "disable"),
 		},
 		Integrations: integrations,
+	}
+}
+
+func parseSessionCookieSameSite(raw string) http.SameSite {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "none":
+		return http.SameSiteNoneMode
+	case "lax":
+		return http.SameSiteLaxMode
+	default:
+		return http.SameSiteStrictMode
 	}
 }
 

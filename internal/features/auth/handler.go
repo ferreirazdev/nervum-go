@@ -20,17 +20,23 @@ const (
 
 // Handler handles auth HTTP routes: register, login, logout, and me (current user).
 type Handler struct {
-	sessionRepo   SessionRepository
-	userRepo      user.Repository
-	orgRepo       organization.Repository
-	serviceToken  string
-	serviceUserID string
+	sessionRepo           SessionRepository
+	userRepo              user.Repository
+	orgRepo               organization.Repository
+	serviceToken          string
+	serviceUserID         string
+	sessionCookieSameSite http.SameSite
 }
 
 // NewHandler returns an auth Handler with the given session and user repositories.
 // serviceToken and serviceUserID are passed to RequireAuth for Bearer-token (CLI) support; can be empty.
-func NewHandler(sessionRepo SessionRepository, userRepo user.Repository, orgRepo organization.Repository, serviceToken, serviceUserID string) *Handler {
-	return &Handler{sessionRepo: sessionRepo, userRepo: userRepo, orgRepo: orgRepo, serviceToken: serviceToken, serviceUserID: serviceUserID}
+// sessionCookieSameSite should be SameSiteNoneMode when the SPA is hosted on another origin than the API.
+func NewHandler(sessionRepo SessionRepository, userRepo user.Repository, orgRepo organization.Repository, serviceToken, serviceUserID string, sessionCookieSameSite http.SameSite) *Handler {
+	return &Handler{
+		sessionRepo: sessionRepo, userRepo: userRepo, orgRepo: orgRepo,
+		serviceToken: serviceToken, serviceUserID: serviceUserID,
+		sessionCookieSameSite: sessionCookieSameSite,
+	}
 }
 
 // Register mounts auth routes under /auth. sensitiveMiddleware is applied to
@@ -95,7 +101,7 @@ func (h *Handler) RegisterUser(c *gin.Context) {
 		return
 	}
 
-	setSessionCookie(c, session.ID.String())
+	SetSessionCookie(c, h.sessionCookieSameSite, session.ID.String(), sessionDuration)
 	c.JSON(http.StatusCreated, u)
 }
 
@@ -131,7 +137,7 @@ func (h *Handler) Login(c *gin.Context) {
 		return
 	}
 
-	setSessionCookie(c, session.ID.String())
+	SetSessionCookie(c, h.sessionCookieSameSite, session.ID.String(), sessionDuration)
 	c.JSON(http.StatusOK, u)
 }
 
@@ -142,21 +148,11 @@ func (h *Handler) Logout(c *gin.Context) {
 			_ = h.sessionRepo.Delete(c.Request.Context(), sessionID)
 		}
 	}
-	clearSessionCookie(c)
+	ClearSessionCookie(c, h.sessionCookieSameSite)
 	c.Status(http.StatusNoContent)
 }
 
 func (h *Handler) Me(c *gin.Context) {
 	u, _ := c.Get(ContextUser)
 	c.JSON(http.StatusOK, u)
-}
-
-func setSessionCookie(c *gin.Context, token string) {
-	c.SetSameSite(http.SameSiteStrictMode)
-	c.SetCookie(CookieName, token, int(sessionDuration.Seconds()), "/", "", true, true)
-}
-
-func clearSessionCookie(c *gin.Context) {
-	c.SetSameSite(http.SameSiteStrictMode)
-	c.SetCookie(CookieName, "", -1, "/", "", true, true)
 }
