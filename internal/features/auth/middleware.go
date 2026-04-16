@@ -1,6 +1,8 @@
 package auth
 
 import (
+	"crypto/sha256"
+	"crypto/subtle"
 	"net/http"
 	"strings"
 
@@ -29,7 +31,7 @@ func RequireAuth(sessionRepo SessionRepository, userRepo user.Repository, servic
 				authz := c.GetHeader("Authorization")
 				if strings.HasPrefix(authz, "Bearer ") {
 					token := strings.TrimSpace(authz[7:])
-					if token == serviceToken {
+					if constantTimeStringEqual(token, serviceToken) {
 						userID, err := uuid.Parse(serviceUserID)
 						if err != nil {
 							c.AbortWithStatusJSON(http.StatusUnauthorized, gin.H{"error": "invalid service user config"})
@@ -83,4 +85,10 @@ func RequireAuth(sessionRepo SessionRepository, userRepo user.Repository, servic
 		c.Set(ContextUser, u)
 		c.Next()
 	}
+}
+
+func constantTimeStringEqual(a, b string) bool {
+	ha := sha256.Sum256([]byte(a))
+	hb := sha256.Sum256([]byte(b))
+	return subtle.ConstantTimeCompare(ha[:], hb[:]) == 1
 }

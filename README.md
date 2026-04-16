@@ -76,6 +76,9 @@ internal/
    # DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
    # PORT (default 8080)
    # APP_ENV=local|staging|production
+   # SESSION_COOKIE_SECURE=false when the API is HTTP-only (local); omit or true in production (HTTPS).
+   # SESSION_COOKIE_SAMESITE=strict|lax|none — `none` is for cross-origin SPAs and requires HTTPS in the browser.
+   # TRUSTED_PROXIES — comma-separated CIDRs of your reverse proxies (e.g. `10.0.0.0/8`); leave empty if clients connect directly.
    ```
 
 3. **Install dependencies and run the API**
@@ -104,7 +107,7 @@ These endpoints back the main SaaS features (exact routes may evolve over time; 
   - `GET /health` — Returns 200 with `{ "status": "ok", "database": "ok" }` when the API and database are healthy. Returns 503 with `{ "status": "unhealthy", "database": "unreachable" }` when the DB ping fails (suitable for load balancer or Kubernetes readiness probes).
 
 - **Auth** (public: login, register; protected: logout, me)
-  - `POST /api/v1/auth/register`, `POST /api/v1/auth/login` (rate-limited)
+  - `POST /api/v1/auth/register`, `POST /api/v1/auth/login` (rate-limited: 5/min per IP, with `Retry-After` on 429)
   - `POST /api/v1/auth/logout`, `GET /api/v1/auth/me` (protected)
 
 - **Organizations**
@@ -126,7 +129,7 @@ These endpoints back the main SaaS features (exact routes may evolve over time; 
   - `POST/GET/PUT/DELETE /api/v1/user-teams` (query: `user_id` or `team_id`)
 
 - **Invitations** (public: by-token, accept; protected: create, list, etc.)
-  - `GET /api/v1/invitations/by-token/:token`, `POST /api/v1/invitations/accept` (public)
+  - `GET /api/v1/invitations/by-token/:token`, `POST /api/v1/invitations/accept` (public, rate-limited per IP)
   - `POST/GET/DELETE /api/v1/invitations` (protected)
 
 - **Environments**
@@ -142,7 +145,7 @@ These endpoints back the main SaaS features (exact routes may evolve over time; 
 - **User environment access**
   - `POST/GET/PUT/DELETE /api/v1/user-environment-access` (query: `user_id` or `environment_id`)
 
-- **Integrations** (OAuth connect, disconnect, state; some routes public)
+- **Integrations** (OAuth connect, disconnect, state; public callbacks rate-limited)
   - `GET/POST/DELETE /api/v1/integrations/...` (e.g. connect callback, list)
 
 - **Dashboard** (under `/api/v1/organizations/:orgId/...`) — GitHub/GCloud dashboard data
@@ -232,6 +235,12 @@ At minimum you’ll need to configure:
 - **PORT** and any **HTTP proxy / TLS** in front of the service
 
 Then point your hosted `nervum-ui` at the public API base URL.
+
+**Security-related environment variables** (see also `.env.example`):
+
+- **`SESSION_COOKIE_SECURE`** — Defaults to `true` so the session cookie uses the `Secure` attribute (sent only over HTTPS). Set to `false` only when developing against a plain-HTTP API (for example `http://localhost:8080`).
+- **`SESSION_COOKIE_SAMESITE`** — `strict` (default), `lax`, or `none`. Cross-site SPAs need `none`, which requires HTTPS in the browser together with `Secure` cookies.
+- **`TRUSTED_PROXIES`** — Comma-separated CIDRs of reverse proxies allowed to supply `X-Forwarded-For` / `X-Real-IP` for [`ClientIP`](https://pkg.go.dev/github.com/gin-gonic/gin#Context.ClientIP). Leave unset or empty when the API is reached directly so client IPs are not spoofable and per-IP rate limits stay meaningful. In production behind Nginx, ALB, etc., set this to your proxy subnets.
 
 ---
 

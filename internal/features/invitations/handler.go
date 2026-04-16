@@ -30,8 +30,9 @@ type Handler struct {
 	orgRepo               organization.Repository
 	userTeamRepo          userteam.Repository
 	userEnvRepo           userenvironmentaccess.Repository
-	sessionRepo           auth.SessionRepository
-	sessionCookieSameSite http.SameSite
+	sessionRepo            auth.SessionRepository
+	sessionCookieSameSite  http.SameSite
+	sessionCookieSecure    bool
 }
 
 // NewHandler returns an invitation Handler with the given repositories and session store.
@@ -43,11 +44,13 @@ func NewHandler(
 	userEnvRepo userenvironmentaccess.Repository,
 	sessionRepo auth.SessionRepository,
 	sessionCookieSameSite http.SameSite,
+	sessionCookieSecure bool,
 ) *Handler {
 	return &Handler{
 		repo: repo, userRepo: userRepo, orgRepo: orgRepo,
 		userTeamRepo: userTeamRepo, userEnvRepo: userEnvRepo, sessionRepo: sessionRepo,
 		sessionCookieSameSite: sessionCookieSameSite,
+		sessionCookieSecure:   sessionCookieSecure,
 	}
 }
 
@@ -57,9 +60,9 @@ func (h *Handler) Register(r *gin.RouterGroup) {
 	r.DELETE("/invitations/:id", h.Delete)
 }
 
-func (h *Handler) RegisterPublic(r *gin.RouterGroup) {
-	r.GET("/invitations/by-token/:token", h.GetByToken)
-	r.POST("/invitations/accept", h.Accept)
+func (h *Handler) RegisterPublic(r *gin.RouterGroup, byTokenLimit, acceptLimit gin.HandlerFunc) {
+	r.GET("/invitations/by-token/:token", byTokenLimit, h.GetByToken)
+	r.POST("/invitations/accept", acceptLimit, h.Accept)
 }
 
 func generateToken() (string, error) {
@@ -319,7 +322,7 @@ func (h *Handler) Accept(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create session"})
 			return
 		}
-		auth.SetSessionCookie(c, h.sessionCookieSameSite, session.ID.String(), sessionDuration)
+		auth.SetSessionCookie(c, h.sessionCookieSameSite, session.ID.String(), sessionDuration, h.sessionCookieSecure)
 		c.JSON(http.StatusOK, existingUser)
 		return
 	}
@@ -371,6 +374,6 @@ func (h *Handler) Accept(c *gin.Context) {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to create session"})
 		return
 	}
-	auth.SetSessionCookie(c, h.sessionCookieSameSite, session.ID.String(), sessionDuration)
+	auth.SetSessionCookie(c, h.sessionCookieSameSite, session.ID.String(), sessionDuration, h.sessionCookieSecure)
 	c.JSON(http.StatusCreated, newUser)
 }

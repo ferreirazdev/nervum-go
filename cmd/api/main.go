@@ -49,6 +49,9 @@ func main() {
 	}
 
 	r := gin.Default()
+	if err := r.SetTrustedProxies(cfg.Server.TrustedProxies); err != nil {
+		log.Fatalf("trusted proxies: %v", err)
+	}
 
 	r.Use(secureheaders.Middleware())
 	r.Use(cors.New(cors.Config{
@@ -72,7 +75,7 @@ func main() {
 
 	// Public auth routes — login and register are rate-limited (5 attempts/minute per IP).
 	authRateLimit := ratelimit.IPRateLimit(5, time.Minute)
-	auth.NewHandler(sessionRepo, userRepo, orgRepo, cfg.Server.ServiceToken, cfg.Server.ServiceUserID, cfg.Server.SessionCookieSameSite).Register(api, authRateLimit)
+	auth.NewHandler(sessionRepo, userRepo, orgRepo, cfg.Server.ServiceToken, cfg.Server.ServiceUserID, cfg.Server.SessionCookieSameSite, cfg.Server.SessionCookieSecure).Register(api, authRateLimit)
 
 	// Protected routes
 	protected := api.Group("")
@@ -85,9 +88,11 @@ func main() {
 	userteam.NewHandler(userTeamRepo).Register(protected)
 	invitationRepo := invitation.NewRepository(db)
 	userEnvAccessRepo := userenvironmentaccess.NewRepository(db)
-	invHandler := invitation.NewHandler(invitationRepo, userRepo, orgRepo, userTeamRepo, userEnvAccessRepo, sessionRepo, cfg.Server.SessionCookieSameSite)
+	invHandler := invitation.NewHandler(invitationRepo, userRepo, orgRepo, userTeamRepo, userEnvAccessRepo, sessionRepo, cfg.Server.SessionCookieSameSite, cfg.Server.SessionCookieSecure)
 	invHandler.Register(protected)
-	invHandler.RegisterPublic(api)
+	invByTokenLimit := ratelimit.IPRateLimit(60, time.Minute)
+	invAcceptLimit := ratelimit.IPRateLimit(10, time.Minute)
+	invHandler.RegisterPublic(api, invByTokenLimit, invAcceptLimit)
 	envRepo := environment.NewRepository(db)
 	environment.NewHandler(envRepo, entityRepo).Register(protected)
 	entity.NewHandler(entityRepo).Register(protected)
@@ -96,7 +101,8 @@ func main() {
 	integrationRepo := integrations.NewRepository(db)
 	integHandler := integrations.NewHandler(integrationRepo, orgRepo, &cfg.Integrations)
 	integHandler.Register(protected)
-	integHandler.RegisterPublic(api)
+	oauthCallbackLimit := ratelimit.IPRateLimit(30, time.Minute)
+	integHandler.RegisterPublic(api, oauthCallbackLimit)
 	dashboardHandler := integrations.NewDashboardHandler(integrationRepo, orgRepo, &cfg.Integrations)
 	dashboardHandler.Register(protected.Group("/organizations"))
 	repositoriesHandler := repositories.NewHandler(repositories.NewRepository(db))

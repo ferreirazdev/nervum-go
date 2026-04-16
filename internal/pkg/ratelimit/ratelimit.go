@@ -3,6 +3,7 @@ package ratelimit
 
 import (
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -34,9 +35,23 @@ func IPRateLimit(maxPerWindow int, window time.Duration) gin.HandlerFunc {
 		}
 		e.count++
 		over := e.count > maxPerWindow
+		retryAfter := 1
+		if over {
+			if d := int(time.Until(e.resetAt).Seconds()); d > 0 {
+				retryAfter = d
+			}
+		}
+		remaining := maxPerWindow - e.count
+		if remaining < 0 {
+			remaining = 0
+		}
 		e.mu.Unlock()
 
+		c.Header("X-RateLimit-Limit", strconv.Itoa(maxPerWindow))
+		c.Header("X-RateLimit-Remaining", strconv.Itoa(remaining))
+
 		if over {
+			c.Header("Retry-After", strconv.Itoa(retryAfter))
 			c.JSON(http.StatusTooManyRequests, gin.H{"error": "too many requests"})
 			c.Abort()
 			return

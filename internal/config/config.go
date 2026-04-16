@@ -33,6 +33,8 @@ type IntegrationsConfig struct {
 type ServerConfig struct {
 	Port                  int
 	SessionCookieSameSite http.SameSite // from SESSION_COOKIE_SAMESITE: strict (default), lax, none — use none for SPA on another origin
+	SessionCookieSecure   bool          // from SESSION_COOKIE_SECURE (default true); set false only for local HTTP API
+	TrustedProxies        []string      // from TRUSTED_PROXIES (comma-separated CIDRs); empty means trust no proxy headers (direct RemoteAddr)
 	CORSAllowedOrigins    []string      // from CORS_ALLOWED_ORIGINS (comma-separated); defaults to localhost:5173
 	// Service token auth for CLI/automation: when Authorization: Bearer <token> matches ServiceToken,
 	// request is treated as authenticated as ServiceUserID (UUID of an existing user in that org).
@@ -86,9 +88,11 @@ func Load() *Config {
 		Server: ServerConfig{
 			Port:                  port,
 			SessionCookieSameSite: parseSessionCookieSameSite(getEnv("SESSION_COOKIE_SAMESITE", "strict")),
+			SessionCookieSecure:   parseEnvBoolDefaultTrue("SESSION_COOKIE_SECURE"),
+			TrustedProxies:        parseCommaSeparated(getEnv("TRUSTED_PROXIES", "")),
 			CORSAllowedOrigins:    corsOrigins,
-			ServiceToken:       getEnv("NERVUM_SERVICE_TOKEN", ""),
-			ServiceUserID:      getEnv("NERVUM_SERVICE_USER_ID", ""),
+			ServiceToken:          getEnv("NERVUM_SERVICE_TOKEN", ""),
+			ServiceUserID:         getEnv("NERVUM_SERVICE_USER_ID", ""),
 		},
 		Database: DatabaseConfig{
 			Host:     getEnv("DB_HOST", "localhost"),
@@ -99,6 +103,43 @@ func Load() *Config {
 			SSLMode:  getEnv("DB_SSLMODE", "disable"),
 		},
 		Integrations: integrations,
+	}
+}
+
+func parseCommaSeparated(raw string) []string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// parseEnvBoolDefaultTrue returns true when unset or invalid; false only for "0", "false", "no" (case-insensitive).
+func parseEnvBoolDefaultTrue(key string) bool {
+	v := strings.TrimSpace(os.Getenv(key))
+	if v == "" {
+		return true
+	}
+	switch strings.ToLower(v) {
+	case "0", "false", "no", "off":
+		return false
+	default:
+		b, err := strconv.ParseBool(v)
+		if err != nil {
+			return true
+		}
+		return b
 	}
 }
 

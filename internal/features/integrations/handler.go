@@ -52,10 +52,10 @@ func (h *Handler) Register(r *gin.RouterGroup) {
 }
 
 // RegisterPublic registers callback routes without auth (state binds to org).
-func (h *Handler) RegisterPublic(r *gin.RouterGroup) {
+func (h *Handler) RegisterPublic(r *gin.RouterGroup, callbackRateLimit gin.HandlerFunc) {
 	g := r.Group("/integrations")
-	g.GET("/github/callback", h.GitHubCallback)
-	g.GET("/gcloud/callback", h.GCloudCallback)
+	g.GET("/github/callback", callbackRateLimit, h.GitHubCallback)
+	g.GET("/gcloud/callback", callbackRateLimit, h.GCloudCallback)
 }
 
 // listResponse omits tokens.

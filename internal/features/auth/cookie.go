@@ -7,15 +7,15 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// SetSessionCookie sets the session cookie (Secure + HttpOnly). sameSite must be
-// SameSiteNoneMode when the browser calls the API from a different origin than the API host.
-func SetSessionCookie(c *gin.Context, sameSite http.SameSite, token string, maxAge time.Duration) {
+// SetSessionCookie sets the session cookie (HttpOnly; Secure when secure is true).
+// sameSite must be SameSiteNoneMode when the browser calls the API from a different origin than the API host.
+func SetSessionCookie(c *gin.Context, sameSite http.SameSite, token string, maxAge time.Duration, secure bool) {
 	c.SetSameSite(sameSite)
-	c.SetCookie(CookieName, token, int(maxAge.Seconds()), "/", "", true, true)
+	c.SetCookie(CookieName, token, int(maxAge.Seconds()), "/", "", secure, true)
 }
 
 // ClearSessionCookie removes the session cookie.
-func ClearSessionCookie(c *gin.Context, sameSite http.SameSite) {
+func ClearSessionCookie(c *gin.Context, sameSite http.SameSite, secure bool) {
 	c.SetSameSite(sameSite)
-	c.SetCookie(CookieName, "", -1, "/", "", true, true)
+	c.SetCookie(CookieName, "", -1, "/", "", secure, true)
 }

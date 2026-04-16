@@ -14,6 +14,8 @@ func TestLoad_Unit(t *testing.T) {
 		t.Setenv("DB_PASSWORD", "")
 		t.Setenv("DB_NAME", "")
 		t.Setenv("DB_SSLMODE", "")
+		t.Setenv("SESSION_COOKIE_SECURE", "")
+		t.Setenv("TRUSTED_PROXIES", "")
 		cfg := Load()
 		if cfg.Server.Port != 8080 {
 			t.Errorf("Server.Port = %d, want 8080", cfg.Server.Port)
@@ -35,6 +37,24 @@ func TestLoad_Unit(t *testing.T) {
 		}
 		if cfg.Database.SSLMode != "disable" {
 			t.Errorf("Database.SSLMode = %q, want disable", cfg.Database.SSLMode)
+		}
+		if !cfg.Server.SessionCookieSecure {
+			t.Error("SessionCookieSecure: want true when SESSION_COOKIE_SECURE is unset")
+		}
+		if cfg.Server.TrustedProxies != nil {
+			t.Errorf("TrustedProxies: want nil when unset, got %#v", cfg.Server.TrustedProxies)
+		}
+	})
+
+	t.Run("session cookie secure false", func(t *testing.T) {
+		t.Setenv("SESSION_COOKIE_SECURE", "false")
+		t.Setenv("TRUSTED_PROXIES", " 10.0.0.0/8 , 127.0.0.1 ")
+		cfg := Load()
+		if cfg.Server.SessionCookieSecure {
+			t.Error("SessionCookieSecure: want false")
+		}
+		if len(cfg.Server.TrustedProxies) != 2 || cfg.Server.TrustedProxies[0] != "10.0.0.0/8" || cfg.Server.TrustedProxies[1] != "127.0.0.1" {
+			t.Errorf("TrustedProxies = %#v", cfg.Server.TrustedProxies)
 		}
 	})
 
