@@ -3,7 +3,7 @@ package integrations
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
+	"errors"
 	"io"
 	"net/http"
 	"net/url"
@@ -18,6 +18,13 @@ import (
 	organization "github.com/nervum/nervum-go/internal/features/organizations"
 	user "github.com/nervum/nervum-go/internal/features/users"
 	"gorm.io/gorm"
+)
+
+const (
+	errGCloudMissingRefresh     = "Google Cloud integration is missing a refresh token; disconnect and connect again in Settings."
+	errGCloudRefreshFailed      = "Google Cloud session could not be refreshed. Disconnect and connect Google Cloud again in Settings."
+	CodeGCloudReconnectRequired = "gcloud_reconnect_required"
+	gcp401AfterReconnectHint    = "Authentication failed. Try reconnecting the Google Cloud integration in Settings."
 )
 
 // Dashboard response types matching nervum-ui mockDashboard.ts for drop-in replacement.
@@ -103,11 +110,20 @@ type DashboardHandler struct {
 	repo    Repository
 	orgRepo organization.Repository
 	cfg     *config.IntegrationsConfig
+	// GCloudHTTPClient, if non-nil, is used for Google OAuth token refresh and GCP API calls (for tests).
+	GCloudHTTPClient *http.Client
 }
 
 // NewDashboardHandler returns a DashboardHandler.
 func NewDashboardHandler(repo Repository, orgRepo organization.Repository, cfg *config.IntegrationsConfig) *DashboardHandler {
 	return &DashboardHandler{repo: repo, orgRepo: orgRepo, cfg: cfg}
+}
+
+func (h *DashboardHandler) gcloudHTTPClient() *http.Client {
+	if h.GCloudHTTPClient != nil {
+		return h.GCloudHTTPClient
+	}
+	return http.DefaultClient
 }
 
 // Register mounts dashboard proxy routes under the given group. Expects group path like "/organizations".
@@ -193,7 +209,7 @@ func (h *DashboardHandler) refreshGCloudToken(c *gin.Context, integ *Integration
 		return "", false
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := h.gcloudHTTPClient().Do(req)
 	if err != nil {
 		return "", false
 	}
@@ -220,6 +236,46 @@ func (h *DashboardHandler) refreshGCloudToken(c *gin.Context, integ *Integration
 	return tok.AccessToken, true
 }
 
+// gcloudExecute runs buildReq (must not set Authorization), sets Bearer accessToken, and on 401 with a
+// stored refresh_token refreshes once and retries. Caller must close resp.Body when err == nil.
+func (h *DashboardHandler) gcloudExecute(c *gin.Context, integ *Integration, accessToken string, buildReq func(accessToken string) (*http.Request, error)) (*http.Response, string, error) {
+	client := h.gcloudHTTPClient()
+	current := accessToken
+	for attempt := 0; attempt < 2; attempt++ {
+		req, err := buildReq(current)
+		if err != nil {
+			return nil, current, err
+		}
+		req.Header.Set("Authorization", "Bearer "+current)
+		resp, err := client.Do(req)
+		if err != nil {
+			return nil, current, err
+		}
+		if resp.StatusCode != http.StatusUnauthorized {
+			return resp, current, nil
+		}
+		if integ.RefreshToken == "" || attempt == 1 {
+			return resp, current, nil
+		}
+		body, _ := io.ReadAll(io.LimitReader(resp.Body, 8192))
+		resp.Body.Close()
+		newTok, ok := h.refreshGCloudToken(c, integ)
+		if !ok {
+			return &http.Response{
+				Status:        http.StatusText(http.StatusUnauthorized),
+				StatusCode:    http.StatusUnauthorized,
+				Proto:         "HTTP/1.1",
+				ProtoMajor:    1,
+				ProtoMinor:    1,
+				Body:          io.NopCloser(bytes.NewReader(body)),
+				ContentLength: int64(len(body)),
+			}, current, nil
+		}
+		current = newTok
+	}
+	return nil, current, errors.New("gcloudExecute: unreachable")
+}
+
 func (h *DashboardHandler) loadIntegration(c *gin.Context, orgID uuid.UUID, provider string) (*Integration, string, bool) {
 	integ, err := h.repo.GetByOrganizationAndProvider(c.Request.Context(), orgID, provider)
 	if err != nil || integ == nil {
@@ -239,12 +295,27 @@ func (h *DashboardHandler) loadIntegration(c *gin.Context, orgID uuid.UUID, prov
 		c.JSON(http.StatusInternalServerError, gin.H{"error": "failed to load integration"})
 		return nil, "", false
 	}
+	if provider == ProviderGCloud && integ.RefreshToken == "" {
+		c.JSON(http.StatusUnauthorized, gin.H{
+			"error": errGCloudMissingRefresh,
+			"code":  CodeGCloudReconnectRequired,
+		})
+		return nil, "", false
+	}
 	// For GCloud, refresh access token if expired or expiring within 5 minutes
 	if provider == ProviderGCloud && integ.RefreshToken != "" {
 		refreshThreshold := integ.AccessTokenExpiresAt.Add(-5 * time.Minute)
-		if integ.AccessTokenExpiresAt.IsZero() || time.Now().After(refreshThreshold) {
+		needsProactiveRefresh := integ.AccessTokenExpiresAt.IsZero() || time.Now().After(refreshThreshold)
+		if needsProactiveRefresh {
 			if newToken, refreshed := h.refreshGCloudToken(c, integ); refreshed {
 				token = newToken
+			} else if integ.AccessTokenExpiresAt.IsZero() || time.Now().After(integ.AccessTokenExpiresAt) {
+				// Access token is expired or expiry unknown, and refresh failed — do not call GCP with a dead bearer
+				c.JSON(http.StatusUnauthorized, gin.H{
+					"error": errGCloudRefreshFailed,
+					"code":  CodeGCloudReconnectRequired,
+				})
+				return nil, "", false
 			}
 		}
 	}
@@ -534,13 +605,12 @@ func (h *DashboardHandler) gcpProjectID(c *gin.Context, integ *Integration) (str
 	return meta.ProjectID, true
 }
 
-
 // gcpErrorMessage builds a user-facing error string for GCP API non-OK responses.
 func gcpErrorMessage(apiName string, statusCode int, body []byte) string {
 	base := apiName + " error"
 	switch statusCode {
 	case http.StatusUnauthorized:
-		base = "Authentication failed; token may be expired."
+		base = gcp401AfterReconnectHint
 	case http.StatusForbidden:
 		base = apiName + " not enabled or permission denied. Enable the API in GCP Console and ensure the account has the required viewer role."
 	case http.StatusNotFound:
@@ -569,10 +639,10 @@ func (h *DashboardHandler) GCloudBuilds(c *gin.Context) {
 	if !ok {
 		return
 	}
-	url := "https://cloudbuild.googleapis.com/v1/projects/" + projectID + "/builds?pageSize=20"
-	req, _ := http.NewRequestWithContext(c.Request.Context(), "GET", url, nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := http.DefaultClient.Do(req)
+	gcpURL := "https://cloudbuild.googleapis.com/v1/projects/" + projectID + "/builds?pageSize=20"
+	resp, _, err := h.gcloudExecute(c, integ, token, func(string) (*http.Request, error) {
+		return http.NewRequestWithContext(c.Request.Context(), "GET", gcpURL, nil)
+	})
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to call Cloud Build API"})
 		return
@@ -628,7 +698,6 @@ func (h *DashboardHandler) GCloudBuilds(c *gin.Context) {
 	c.JSON(http.StatusOK, out)
 }
 
-
 func (h *DashboardHandler) GCloudDeploys(c *gin.Context) {
 	_, orgID, ok := h.requireOrgMember(c)
 	if !ok {
@@ -644,15 +713,17 @@ func (h *DashboardHandler) GCloudDeploys(c *gin.Context) {
 	}
 	var allServices []gcpRunV2Service
 	for _, region := range cloudRunV2Regions {
-		reqURL := "https://run.googleapis.com/v2/projects/" + projectID + "/locations/" + region + "/services?pageSize=100"
-		req, _ := http.NewRequestWithContext(c.Request.Context(), "GET", reqURL, nil)
-		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := http.DefaultClient.Do(req)
+		r := region
+		reqURL := "https://run.googleapis.com/v2/projects/" + projectID + "/locations/" + r + "/services?pageSize=100"
+		resp, newTok, err := h.gcloudExecute(c, integ, token, func(string) (*http.Request, error) {
+			return http.NewRequestWithContext(c.Request.Context(), "GET", reqURL, nil)
+		})
 		if err != nil {
 			continue
 		}
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
+		token = newTok
 		if resp.StatusCode != http.StatusOK {
 			continue
 		}
@@ -725,10 +796,14 @@ func (h *DashboardHandler) GCloudLogs(c *gin.Context) {
 		"orderBy":       "timestamp desc",
 	}
 	jsonBody, _ := json.Marshal(body)
-	req, _ := http.NewRequestWithContext(c.Request.Context(), "POST", "https://logging.googleapis.com/v2/entries:list", bytes.NewReader(jsonBody))
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, _, err := h.gcloudExecute(c, integ, token, func(string) (*http.Request, error) {
+		req, err := http.NewRequestWithContext(c.Request.Context(), "POST", "https://logging.googleapis.com/v2/entries:list", bytes.NewReader(jsonBody))
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		return req, nil
+	})
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to call Logging API"})
 		return
@@ -792,15 +867,17 @@ func (h *DashboardHandler) GCloudServicesHealth(c *gin.Context) {
 	}
 	var allServices []gcpRunV2Service
 	for _, region := range cloudRunV2Regions {
-		reqURL := "https://run.googleapis.com/v2/projects/" + projectID + "/locations/" + region + "/services?pageSize=100"
-		req, _ := http.NewRequestWithContext(c.Request.Context(), "GET", reqURL, nil)
-		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := http.DefaultClient.Do(req)
+		r := region
+		reqURL := "https://run.googleapis.com/v2/projects/" + projectID + "/locations/" + r + "/services?pageSize=100"
+		resp, newTok, err := h.gcloudExecute(c, integ, token, func(string) (*http.Request, error) {
+			return http.NewRequestWithContext(c.Request.Context(), "GET", reqURL, nil)
+		})
 		if err != nil {
 			continue
 		}
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
+		token = newTok
 		if resp.StatusCode != http.StatusOK {
 			continue
 		}
@@ -886,9 +963,9 @@ func (h *DashboardHandler) GCloudV2ServicesList(c *gin.Context) {
 		if pageToken := c.Query("pageToken"); pageToken != "" {
 			reqURL += "&pageToken=" + url.QueryEscape(pageToken)
 		}
-		req, _ := http.NewRequestWithContext(c.Request.Context(), "GET", reqURL, nil)
-		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := http.DefaultClient.Do(req)
+		resp, _, err := h.gcloudExecute(c, integ, token, func(string) (*http.Request, error) {
+			return http.NewRequestWithContext(c.Request.Context(), "GET", reqURL, nil)
+		})
 		if err != nil {
 			c.JSON(http.StatusBadGateway, gin.H{"error": "failed to call Cloud Run API"})
 			return
@@ -907,18 +984,20 @@ func (h *DashboardHandler) GCloudV2ServicesList(c *gin.Context) {
 	var allServices []json.RawMessage
 	var unreachable []string
 	for _, location := range cloudRunV2Regions {
-		reqURL := "https://run.googleapis.com/v2/projects/" + projectID + "/locations/" + location + "/services?pageSize=100"
-		req, _ := http.NewRequestWithContext(c.Request.Context(), "GET", reqURL, nil)
-		req.Header.Set("Authorization", "Bearer "+token)
-		resp, err := http.DefaultClient.Do(req)
+		loc := location
+		reqURL := "https://run.googleapis.com/v2/projects/" + projectID + "/locations/" + loc + "/services?pageSize=100"
+		resp, newTok, err := h.gcloudExecute(c, integ, token, func(string) (*http.Request, error) {
+			return http.NewRequestWithContext(c.Request.Context(), "GET", reqURL, nil)
+		})
 		if err != nil {
 			continue
 		}
 		body, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
+		token = newTok
 		if resp.StatusCode != http.StatusOK {
 			if resp.StatusCode == http.StatusForbidden || resp.StatusCode == http.StatusNotFound {
-				unreachable = append(unreachable, location)
+				unreachable = append(unreachable, loc)
 			}
 			continue
 		}
@@ -975,9 +1054,9 @@ func (h *DashboardHandler) GCloudV2ServiceGet(c *gin.Context) {
 		return
 	}
 	reqURL := "https://run.googleapis.com/v2/projects/" + projectID + "/locations/" + url.PathEscape(location) + "/services/" + url.PathEscape(shortName)
-	req, _ := http.NewRequestWithContext(c.Request.Context(), "GET", reqURL, nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := http.DefaultClient.Do(req)
+	resp, _, err := h.gcloudExecute(c, integ, token, func(string) (*http.Request, error) {
+		return http.NewRequestWithContext(c.Request.Context(), "GET", reqURL, nil)
+	})
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to call Cloud Run API"})
 		return
@@ -1024,9 +1103,9 @@ func (h *DashboardHandler) GCloudV2ServiceRevisions(c *gin.Context) {
 	if pageToken := c.Query("pageToken"); pageToken != "" {
 		reqURL += "?pageToken=" + url.QueryEscape(pageToken)
 	}
-	req, _ := http.NewRequestWithContext(c.Request.Context(), "GET", reqURL, nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := http.DefaultClient.Do(req)
+	resp, _, err := h.gcloudExecute(c, integ, token, func(string) (*http.Request, error) {
+		return http.NewRequestWithContext(c.Request.Context(), "GET", reqURL, nil)
+	})
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to call Cloud Run API"})
 		return
@@ -1056,15 +1135,13 @@ func (h *DashboardHandler) GCloudSQLInstancesList(c *gin.Context) {
 	if !ok {
 		return
 	}
-
-	fmt.Println("--------", projectID)
 	reqURL := "https://sqladmin.googleapis.com/v1/projects/" + projectID + "/instances"
 	if pageToken := c.Query("pageToken"); pageToken != "" {
 		reqURL += "?pageToken=" + url.QueryEscape(pageToken)
 	}
-	req, _ := http.NewRequestWithContext(c.Request.Context(), "GET", reqURL, nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := http.DefaultClient.Do(req)
+	resp, _, err := h.gcloudExecute(c, integ, token, func(string) (*http.Request, error) {
+		return http.NewRequestWithContext(c.Request.Context(), "GET", reqURL, nil)
+	})
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to call Cloud SQL API"})
 		return
@@ -1098,9 +1175,9 @@ func (h *DashboardHandler) GCloudSQLInstanceGet(c *gin.Context) {
 		return
 	}
 	reqURL := "https://sqladmin.googleapis.com/v1/projects/" + projectID + "/instances/" + url.PathEscape(instanceName)
-	req, _ := http.NewRequestWithContext(c.Request.Context(), "GET", reqURL, nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := http.DefaultClient.Do(req)
+	resp, _, err := h.gcloudExecute(c, integ, token, func(string) (*http.Request, error) {
+		return http.NewRequestWithContext(c.Request.Context(), "GET", reqURL, nil)
+	})
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to call Cloud SQL API"})
 		return
@@ -1134,9 +1211,9 @@ func (h *DashboardHandler) GCloudSQLDatabases(c *gin.Context) {
 		return
 	}
 	reqURL := "https://sqladmin.googleapis.com/v1/projects/" + projectID + "/instances/" + url.PathEscape(instanceName) + "/databases"
-	req, _ := http.NewRequestWithContext(c.Request.Context(), "GET", reqURL, nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := http.DefaultClient.Do(req)
+	resp, _, err := h.gcloudExecute(c, integ, token, func(string) (*http.Request, error) {
+		return http.NewRequestWithContext(c.Request.Context(), "GET", reqURL, nil)
+	})
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to call Cloud SQL API"})
 		return
@@ -1180,9 +1257,9 @@ func (h *DashboardHandler) GCloudSQLBackupRuns(c *gin.Context) {
 	if len(backupQ) > 0 {
 		reqURL += "?" + strings.Join(backupQ, "&")
 	}
-	req, _ := http.NewRequestWithContext(c.Request.Context(), "GET", reqURL, nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := http.DefaultClient.Do(req)
+	resp, _, err := h.gcloudExecute(c, integ, token, func(string) (*http.Request, error) {
+		return http.NewRequestWithContext(c.Request.Context(), "GET", reqURL, nil)
+	})
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to call Cloud SQL API"})
 		return
@@ -1226,9 +1303,9 @@ func (h *DashboardHandler) GCloudComputeInstancesList(c *gin.Context) {
 	if len(q) > 0 {
 		reqURL += "?" + strings.Join(q, "&")
 	}
-	req, _ := http.NewRequestWithContext(c.Request.Context(), "GET", reqURL, nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := http.DefaultClient.Do(req)
+	resp, _, err := h.gcloudExecute(c, integ, token, func(string) (*http.Request, error) {
+		return http.NewRequestWithContext(c.Request.Context(), "GET", reqURL, nil)
+	})
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to call Compute Engine API"})
 		return
@@ -1263,9 +1340,9 @@ func (h *DashboardHandler) GCloudComputeInstanceGet(c *gin.Context) {
 		return
 	}
 	reqURL := "https://compute.googleapis.com/compute/v1/projects/" + projectID + "/zones/" + url.PathEscape(zone) + "/instances/" + url.PathEscape(instanceName)
-	req, _ := http.NewRequestWithContext(c.Request.Context(), "GET", reqURL, nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	resp, err := http.DefaultClient.Do(req)
+	resp, _, err := h.gcloudExecute(c, integ, token, func(string) (*http.Request, error) {
+		return http.NewRequestWithContext(c.Request.Context(), "GET", reqURL, nil)
+	})
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to call Compute Engine API"})
 		return
@@ -1300,10 +1377,14 @@ func (h *DashboardHandler) GCloudComputeInstanceStart(c *gin.Context) {
 		return
 	}
 	reqURL := "https://compute.googleapis.com/compute/v1/projects/" + projectID + "/zones/" + url.PathEscape(zone) + "/instances/" + url.PathEscape(instanceName) + "/start"
-	req, _ := http.NewRequestWithContext(c.Request.Context(), "POST", reqURL, nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, _, err := h.gcloudExecute(c, integ, token, func(string) (*http.Request, error) {
+		req, err := http.NewRequestWithContext(c.Request.Context(), "POST", reqURL, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		return req, nil
+	})
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to call Compute Engine API"})
 		return
@@ -1338,10 +1419,14 @@ func (h *DashboardHandler) GCloudComputeInstanceStop(c *gin.Context) {
 		return
 	}
 	reqURL := "https://compute.googleapis.com/compute/v1/projects/" + projectID + "/zones/" + url.PathEscape(zone) + "/instances/" + url.PathEscape(instanceName) + "/stop"
-	req, _ := http.NewRequestWithContext(c.Request.Context(), "POST", reqURL, nil)
-	req.Header.Set("Authorization", "Bearer "+token)
-	req.Header.Set("Content-Type", "application/json")
-	resp, err := http.DefaultClient.Do(req)
+	resp, _, err := h.gcloudExecute(c, integ, token, func(string) (*http.Request, error) {
+		req, err := http.NewRequestWithContext(c.Request.Context(), "POST", reqURL, nil)
+		if err != nil {
+			return nil, err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		return req, nil
+	})
 	if err != nil {
 		c.JSON(http.StatusBadGateway, gin.H{"error": "failed to call Compute Engine API"})
 		return
@@ -1374,9 +1459,9 @@ type sentryIssueAPI struct {
 
 // sentryReleaseAPI is the minimal shape returned by Sentry's releases endpoint.
 type sentryReleaseAPI struct {
-	Version     string  `json:"version"`
-	DateCreated string  `json:"dateCreated"`
-	NewGroups   int     `json:"newGroups"`
+	Version     string `json:"version"`
+	DateCreated string `json:"dateCreated"`
+	NewGroups   int    `json:"newGroups"`
 	Projects    []struct {
 		Slug string `json:"slug"`
 		Name string `json:"name"`

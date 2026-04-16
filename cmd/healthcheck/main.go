@@ -28,10 +28,10 @@ import (
 )
 
 const (
-	defaultTimeout         = 10 * time.Second
-	expectedStatusDefault  = 200
-	statusHealthy          = "healthy"
-	statusCritical         = "critical"
+	defaultTimeout        = 10 * time.Second
+	expectedStatusDefault = 200
+	statusHealthy         = "healthy"
+	statusCritical        = "critical"
 )
 
 type entityResponse struct {

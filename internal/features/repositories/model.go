@@ -12,7 +12,7 @@ import (
 type OrganizationRepository struct {
 	ID             uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
 	OrganizationID uuid.UUID `gorm:"type:uuid;not null;uniqueIndex:idx_org_repos_provider_full" json:"organization_id"`
-	Provider       string    `gorm:"type:text;not null;uniqueIndex:idx_org_repos_provider_full" json:"provider"` // e.g. "github"
+	Provider       string    `gorm:"type:text;not null;uniqueIndex:idx_org_repos_provider_full" json:"provider"`  // e.g. "github"
 	FullName       string    `gorm:"type:text;not null;uniqueIndex:idx_org_repos_provider_full" json:"full_name"` // "owner/repo"
 	CreatedAt      time.Time `json:"created_at"`
 }

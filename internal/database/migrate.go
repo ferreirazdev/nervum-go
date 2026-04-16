@@ -4,8 +4,8 @@ import (
 	"log"
 
 	"github.com/nervum/nervum-go/internal/features/auth"
-	"github.com/nervum/nervum-go/internal/features/environments"
 	"github.com/nervum/nervum-go/internal/features/entities"
+	"github.com/nervum/nervum-go/internal/features/environments"
 	integration "github.com/nervum/nervum-go/internal/features/integrations"
 	"github.com/nervum/nervum-go/internal/features/invitations"
 	"github.com/nervum/nervum-go/internal/features/organizations"

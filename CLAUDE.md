@@ -47,7 +47,7 @@ New features follow the same pattern and are wired up in `cmd/api/main.go`.
 
 **Database**: Postgres in production, SQLite in-memory for unit tests. Migrations live in `migrations/` as numbered SQL pairs (`*.up.sql` / `*.down.sql`) and are embedded into the binary via `internal/database/embed.go`. Migrations run automatically on API startup.
 
-**Config** (`internal/config/`): loaded from environment variables (`.env` via godotenv). Key groups: `Database`, `Server` (port, CORS, session cookie, service token), `Integrations` (GitHub/Google OAuth, encryption key).
+**Config** (`internal/config/`): loaded from environment variables (`.env` via godotenv). Key groups: `Database`, `Server` (port, CORS, session cookie, service token), `Integrations` (GitHub/Google OAuth, encryption key), `Stripe` (`STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, optional `STRIPE_TRIAL_PERIOD_DAYS`, default 15), `InternalAdminEmails` (`INTERNAL_ADMIN_EMAILS`, comma-separated; defaults to `ferreirazdev@gmail.com` when unset). Billing routes live in `internal/features/billing/`; set `stripe_price_id` on rows in `billing_plans` (migration seeds `starter` with a placeholder until you replace it with a real Stripe Price id — plans containing `REPLACE` in the price id are hidden from `GET /billing/plans`). Internal operator APIs: `internal/features/internaladmin/` under `GET|POST|PUT|DELETE /api/v1/internal/...` with `auth.RequireInternalAdmin` after `RequireAuth`.
 
 **JSONB fields**: use `internal/pkg/types.JSONB` for Postgres `jsonb` columns (e.g., `Metadata`, health check headers).
 

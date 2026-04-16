@@ -13,9 +13,18 @@ import (
 
 // Config holds server and database configuration loaded from the environment.
 type Config struct {
-	Server       ServerConfig
-	Database     DatabaseConfig
-	Integrations IntegrationsConfig
+	Server              ServerConfig
+	Database            DatabaseConfig
+	Integrations        IntegrationsConfig
+	Stripe              StripeConfig
+	InternalAdminEmails []string // INTERNAL_ADMIN_EMAILS (comma-separated); default ferreirazdev@gmail.com when unset
+}
+
+// StripeConfig holds Stripe Billing API keys (Checkout, Customer Portal, webhooks).
+type StripeConfig struct {
+	SecretKey       string // STRIPE_SECRET_KEY
+	WebhookSecret   string // STRIPE_WEBHOOK_SECRET (optional in dev; required for webhook verification)
+	TrialPeriodDays int64  // STRIPE_TRIAL_PERIOD_DAYS (default 15)
 }
 
 // IntegrationsConfig holds OAuth and encryption settings for org integrations.
@@ -84,7 +93,26 @@ func Load() *Config {
 		// If decode fails or length != 32, EncryptionKey stays nil; connect will fail with clear error
 	}
 
+	trialDays, _ := strconv.ParseInt(getEnv("STRIPE_TRIAL_PERIOD_DAYS", "15"), 10, 64)
+	if trialDays <= 0 {
+		trialDays = 15
+	}
+
+	internalAdmins := parseCommaSeparated(os.Getenv("INTERNAL_ADMIN_EMAILS"))
+	for i := range internalAdmins {
+		internalAdmins[i] = strings.ToLower(strings.TrimSpace(internalAdmins[i]))
+	}
+	if len(internalAdmins) == 0 {
+		internalAdmins = []string{"ferreirazdev@gmail.com"}
+	}
+
 	return &Config{
+		InternalAdminEmails: internalAdmins,
+		Stripe: StripeConfig{
+			SecretKey:       getEnv("STRIPE_SECRET_KEY", ""),
+			WebhookSecret:   getEnv("STRIPE_WEBHOOK_SECRET", ""),
+			TrialPeriodDays: trialDays,
+		},
 		Server: ServerConfig{
 			Port:                  port,
 			SessionCookieSameSite: parseSessionCookieSameSite(getEnv("SESSION_COOKIE_SAMESITE", "strict")),

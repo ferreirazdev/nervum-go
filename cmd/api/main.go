@@ -13,9 +13,11 @@ import (
 	"github.com/nervum/nervum-go/internal/config"
 	"github.com/nervum/nervum-go/internal/database"
 	"github.com/nervum/nervum-go/internal/features/auth"
-	"github.com/nervum/nervum-go/internal/features/environments"
+	"github.com/nervum/nervum-go/internal/features/billing"
 	"github.com/nervum/nervum-go/internal/features/entities"
+	"github.com/nervum/nervum-go/internal/features/environments"
 	"github.com/nervum/nervum-go/internal/features/integrations"
+	"github.com/nervum/nervum-go/internal/features/internaladmin"
 	"github.com/nervum/nervum-go/internal/features/invitations"
 	"github.com/nervum/nervum-go/internal/features/organizations"
 	"github.com/nervum/nervum-go/internal/features/orgservices"
@@ -28,6 +30,7 @@ import (
 	"github.com/nervum/nervum-go/internal/pkg/health"
 	"github.com/nervum/nervum-go/internal/pkg/ratelimit"
 	"github.com/nervum/nervum-go/internal/pkg/secureheaders"
+	stripe "github.com/stripe/stripe-go/v81"
 )
 
 func main() {
@@ -77,9 +80,25 @@ func main() {
 	authRateLimit := ratelimit.IPRateLimit(5, time.Minute)
 	auth.NewHandler(sessionRepo, userRepo, orgRepo, cfg.Server.ServiceToken, cfg.Server.ServiceUserID, cfg.Server.SessionCookieSameSite, cfg.Server.SessionCookieSecure).Register(api, authRateLimit)
 
+	if cfg.Stripe.SecretKey != "" {
+		stripe.Key = cfg.Stripe.SecretKey
+	}
+
+	planListLimit := ratelimit.IPRateLimit(60, time.Minute)
+	billingPlanRepo := billing.NewPlanRepository(db)
+	billingHandler := billing.NewHandler(billingPlanRepo, orgRepo, &cfg.Stripe, cfg.Integrations.FrontendURL)
+	billingHandler.RegisterPublic(api, planListLimit)
+
 	// Protected routes
 	protected := api.Group("")
 	protected.Use(requireAuth)
+	billingHandler.RegisterProtected(protected)
+
+	internalAdminLimit := ratelimit.IPRateLimit(120, time.Minute)
+	internalGroup := protected.Group("/internal")
+	internalGroup.Use(internalAdminLimit, auth.RequireInternalAdmin(cfg.InternalAdminEmails))
+	internaladmin.NewHandler(billingPlanRepo, userRepo, orgRepo).Register(internalGroup)
+
 	organization.NewHandler(orgRepo).Register(protected)
 	user.NewHandler(userRepo).Register(protected)
 	teamRepo := teams.NewRepository(db)

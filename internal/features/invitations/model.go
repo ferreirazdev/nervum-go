@@ -50,7 +50,7 @@ func (i *Invitation) BeforeCreate(tx *gorm.DB) error {
 
 type InvitationTeam struct {
 	InvitationID uuid.UUID `gorm:"type:uuid;not null;uniqueIndex:idx_inv_team" json:"invitation_id"`
-	TeamID        uuid.UUID `gorm:"type:uuid;not null;uniqueIndex:idx_inv_team" json:"team_id"`
+	TeamID       uuid.UUID `gorm:"type:uuid;not null;uniqueIndex:idx_inv_team" json:"team_id"`
 }
 
 func (InvitationTeam) TableName() string { return "invitation_teams" }

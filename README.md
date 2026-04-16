@@ -148,6 +148,18 @@ These endpoints back the main SaaS features (exact routes may evolve over time; 
 - **Integrations** (OAuth connect, disconnect, state; public callbacks rate-limited)
   - `GET/POST/DELETE /api/v1/integrations/...` (e.g. connect callback, list)
 
+### Google Cloud dashboard errors (`gcloud_reconnect_required`)
+
+Organization-scoped **Google Cloud** dashboard routes (e.g. `GET .../dashboard/gcloud/builds`) may return **401** with a JSON body such as:
+
+```json
+{ "error": "<human-readable message>", "code": "gcloud_reconnect_required" }
+```
+
+**Meaning:** the stored OAuth session cannot be renewed (missing or invalid refresh token, revoked consent, wrong `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`, or a changed `INTEGRATION_ENCRYPTION_KEY` that no longer matches ciphertext in the database).
+
+**What org admins should do:** open **Integrations** in the product UI, disconnect Google Cloud if needed, and complete **Connect** again so a new refresh token is stored. If problems persist, verify the API server’s integration env vars and that the Google OAuth client is still valid.
+
 - **Dashboard** (under `/api/v1/organizations/:orgId/...`) — GitHub/GCloud dashboard data
   - Dashboard handlers mounted under `protected.Group("/organizations")`
 

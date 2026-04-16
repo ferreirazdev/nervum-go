@@ -80,10 +80,10 @@ func (h *Handler) List(c *gin.Context) {
 }
 
 type createRequest struct {
-	ServiceName   string `json:"service_name" binding:"required"`
-	Location      string `json:"location"`
-	Kind          string `json:"kind"`
-	InstanceType  string `json:"instance_type"`
+	ServiceName  string `json:"service_name" binding:"required"`
+	Location     string `json:"location"`
+	Kind         string `json:"kind"`
+	InstanceType string `json:"instance_type"`
 }
 
 func (h *Handler) Create(c *gin.Context) {

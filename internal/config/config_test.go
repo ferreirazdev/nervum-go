@@ -16,6 +16,7 @@ func TestLoad_Unit(t *testing.T) {
 		t.Setenv("DB_SSLMODE", "")
 		t.Setenv("SESSION_COOKIE_SECURE", "")
 		t.Setenv("TRUSTED_PROXIES", "")
+		t.Setenv("INTERNAL_ADMIN_EMAILS", "")
 		cfg := Load()
 		if cfg.Server.Port != 8080 {
 			t.Errorf("Server.Port = %d, want 8080", cfg.Server.Port)
@@ -44,6 +45,9 @@ func TestLoad_Unit(t *testing.T) {
 		if cfg.Server.TrustedProxies != nil {
 			t.Errorf("TrustedProxies: want nil when unset, got %#v", cfg.Server.TrustedProxies)
 		}
+		if len(cfg.InternalAdminEmails) != 1 || cfg.InternalAdminEmails[0] != "ferreirazdev@gmail.com" {
+			t.Errorf("InternalAdminEmails = %#v", cfg.InternalAdminEmails)
+		}
 	})
 
 	t.Run("session cookie secure false", func(t *testing.T) {
@@ -58,7 +62,19 @@ func TestLoad_Unit(t *testing.T) {
 		}
 	})
 
+	t.Run("internal admin emails from env", func(t *testing.T) {
+		t.Setenv("INTERNAL_ADMIN_EMAILS", " a@b.com , C@D.com ")
+		cfg := Load()
+		if len(cfg.InternalAdminEmails) != 2 {
+			t.Fatalf("len = %d", len(cfg.InternalAdminEmails))
+		}
+		if cfg.InternalAdminEmails[0] != "a@b.com" || cfg.InternalAdminEmails[1] != "c@d.com" {
+			t.Fatalf("got %#v", cfg.InternalAdminEmails)
+		}
+	})
+
 	t.Run("from env", func(t *testing.T) {
+		t.Setenv("INTERNAL_ADMIN_EMAILS", "")
 		t.Setenv("PORT", "3000")
 		t.Setenv("DB_PORT", "5433")
 		t.Setenv("DB_HOST", "db.example.com")

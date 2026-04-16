@@ -12,11 +12,11 @@ import (
 const (
 	TypeService  = "service"
 	TypeDatabase = "database"
-	TypeInfra   = "infra"
-	TypeTeam    = "team"
-	TypeRoadmap = "roadmap"
-	TypeCost    = "cost"
-	TypeMetric  = "metric"
+	TypeInfra    = "infra"
+	TypeTeam     = "team"
+	TypeRoadmap  = "roadmap"
+	TypeCost     = "cost"
+	TypeMetric   = "metric"
 )
 
 const (
@@ -27,21 +27,21 @@ const (
 
 // Entity represents a node on the environment map (service, database, infra, etc.). Stored in table entities.
 type Entity struct {
-	ID             uuid.UUID      `gorm:"type:uuid;primaryKey" json:"id"`
-	OrganizationID uuid.UUID      `gorm:"type:uuid;not null;index" json:"organization_id"`
-	EnvironmentID  uuid.UUID      `gorm:"type:uuid;not null;index" json:"environment_id"`
-	Type           string         `gorm:"type:text;not null" json:"type"`
-	Name           string         `gorm:"type:text;not null" json:"name"`
-	Status         string         `gorm:"type:text" json:"status"` // healthy, warning, critical
-	OwnerTeamID    *uuid.UUID     `gorm:"type:uuid" json:"owner_team_id,omitempty"`
-	Metadata       types.JSONB    `gorm:"type:jsonb" json:"metadata,omitempty"`
+	ID             uuid.UUID   `gorm:"type:uuid;primaryKey" json:"id"`
+	OrganizationID uuid.UUID   `gorm:"type:uuid;not null;index" json:"organization_id"`
+	EnvironmentID  uuid.UUID   `gorm:"type:uuid;not null;index" json:"environment_id"`
+	Type           string      `gorm:"type:text;not null" json:"type"`
+	Name           string      `gorm:"type:text;not null" json:"name"`
+	Status         string      `gorm:"type:text" json:"status"` // healthy, warning, critical
+	OwnerTeamID    *uuid.UUID  `gorm:"type:uuid" json:"owner_team_id,omitempty"`
+	Metadata       types.JSONB `gorm:"type:jsonb" json:"metadata,omitempty"`
 	// Health check: when set, CLI/automation can probe the URL and update Status.
-	HealthCheckURL            string      `gorm:"type:text" json:"health_check_url,omitempty"`
-	HealthCheckMethod         string      `gorm:"type:text" json:"health_check_method,omitempty"`          // default GET
-	HealthCheckHeaders        types.JSONB `gorm:"type:jsonb" json:"health_check_headers,omitempty"`       // map of header name -> value
-	HealthCheckExpectedStatus int         `gorm:"type:int" json:"health_check_expected_status,omitempty"` // default 200
-	CreatedAt                 time.Time  `json:"created_at"`
-	UpdatedAt                 time.Time  `json:"updated_at"`
+	HealthCheckURL            string         `gorm:"type:text" json:"health_check_url,omitempty"`
+	HealthCheckMethod         string         `gorm:"type:text" json:"health_check_method,omitempty"`         // default GET
+	HealthCheckHeaders        types.JSONB    `gorm:"type:jsonb" json:"health_check_headers,omitempty"`       // map of header name -> value
+	HealthCheckExpectedStatus int            `gorm:"type:int" json:"health_check_expected_status,omitempty"` // default 200
+	CreatedAt                 time.Time      `json:"created_at"`
+	UpdatedAt                 time.Time      `json:"updated_at"`
 	DeletedAt                 gorm.DeletedAt `gorm:"index" json:"-"`
 
 	Organization interface{} `gorm:"-" json:"-"`

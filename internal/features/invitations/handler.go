@@ -10,9 +10,9 @@ import (
 	"github.com/google/uuid"
 	"github.com/nervum/nervum-go/internal/features/auth"
 	organization "github.com/nervum/nervum-go/internal/features/organizations"
-	user "github.com/nervum/nervum-go/internal/features/users"
 	userenvironmentaccess "github.com/nervum/nervum-go/internal/features/user_environment_access"
 	userteam "github.com/nervum/nervum-go/internal/features/user_teams"
+	user "github.com/nervum/nervum-go/internal/features/users"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
@@ -30,9 +30,9 @@ type Handler struct {
 	orgRepo               organization.Repository
 	userTeamRepo          userteam.Repository
 	userEnvRepo           userenvironmentaccess.Repository
-	sessionRepo            auth.SessionRepository
-	sessionCookieSameSite  http.SameSite
-	sessionCookieSecure    bool
+	sessionRepo           auth.SessionRepository
+	sessionCookieSameSite http.SameSite
+	sessionCookieSecure   bool
 }
 
 // NewHandler returns an invitation Handler with the given repositories and session store.
@@ -136,9 +136,9 @@ func (h *Handler) Create(c *gin.Context) {
 	inviteURL := origin + "/accept-invite?token=" + token
 	inv.Teams = inv.Teams // reload if needed; we have team IDs in req
 	c.JSON(http.StatusCreated, gin.H{
-		"invitation":  inv,
-		"invite_url":  inviteURL,
-		"token":       token,
+		"invitation": inv,
+		"invite_url": inviteURL,
+		"token":      token,
 	})
 }
 

@@ -13,11 +13,11 @@ import (
 type OrganizationService struct {
 	ID             uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
 	OrganizationID uuid.UUID `gorm:"type:uuid;not null;uniqueIndex:idx_org_svcs_provider_kind_name" json:"organization_id"`
-	Provider       string    `gorm:"type:text;not null;uniqueIndex:idx_org_svcs_provider_kind_name" json:"provider"`       // e.g. "gcloud"
+	Provider       string    `gorm:"type:text;not null;uniqueIndex:idx_org_svcs_provider_kind_name" json:"provider"`               // e.g. "gcloud"
 	Kind           string    `gorm:"type:text;not null;default:cloud_run;uniqueIndex:idx_org_svcs_provider_kind_name" json:"kind"` // cloud_run, cloud_sql, compute
-	ServiceName    string    `gorm:"type:text;not null;uniqueIndex:idx_org_svcs_provider_kind_name" json:"service_name"`   // Cloud Run service name, instance name, or VM name
-	Location       string    `gorm:"type:text" json:"location,omitempty"`                                                 // optional region/zone
-	InstanceType   string    `gorm:"type:text" json:"instance_type,omitempty"`                                           // e.g. Cloud SQL databaseVersion, Compute machine type
+	ServiceName    string    `gorm:"type:text;not null;uniqueIndex:idx_org_svcs_provider_kind_name" json:"service_name"`           // Cloud Run service name, instance name, or VM name
+	Location       string    `gorm:"type:text" json:"location,omitempty"`                                                          // optional region/zone
+	InstanceType   string    `gorm:"type:text" json:"instance_type,omitempty"`                                                     // e.g. Cloud SQL databaseVersion, Compute machine type
 	CreatedAt      time.Time `json:"created_at"`
 }
 

@@ -23,10 +23,10 @@ type Handler struct {
 	sessionRepo           SessionRepository
 	userRepo              user.Repository
 	orgRepo               organization.Repository
-	serviceToken           string
-	serviceUserID          string
-	sessionCookieSameSite  http.SameSite
-	sessionCookieSecure    bool
+	serviceToken          string
+	serviceUserID         string
+	sessionCookieSameSite http.SameSite
+	sessionCookieSecure   bool
 }
 
 // NewHandler returns an auth Handler with the given session and user repositories.

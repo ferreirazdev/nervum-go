@@ -13,6 +13,7 @@ type Repository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*User, error)
 	GetByEmail(ctx context.Context, email string) (*User, error)
 	List(ctx context.Context) ([]User, error)
+	ListPaged(ctx context.Context, limit, offset int) ([]User, int64, error)
 	ListByOrganization(ctx context.Context, orgID uuid.UUID) ([]User, error)
 	Update(ctx context.Context, u *User) error
 	Delete(ctx context.Context, id uuid.UUID) error
@@ -53,6 +54,25 @@ func (r *repository) List(ctx context.Context) ([]User, error) {
 	var list []User
 	err := r.db.WithContext(ctx).Find(&list).Error
 	return list, err
+}
+
+func (r *repository) ListPaged(ctx context.Context, limit, offset int) ([]User, int64, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	var total int64
+	if err := r.db.WithContext(ctx).Model(&User{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var list []User
+	err := r.db.WithContext(ctx).Order("created_at DESC").Limit(limit).Offset(offset).Find(&list).Error
+	return list, total, err
 }
 
 func (r *repository) ListByOrganization(ctx context.Context, orgID uuid.UUID) ([]User, error) {

@@ -73,6 +73,31 @@ func TestRepository_List_Unit(t *testing.T) {
 	}
 }
 
+func TestRepository_GetByStripeSubscriptionID_Unit(t *testing.T) {
+	db := testDB(t)
+	sqlDB, _ := db.DB()
+	defer sqlDB.Close()
+
+	repo := NewRepository(db)
+	ctx := context.Background()
+
+	o := &Organization{Name: "Paid Org", StripeSubscriptionID: "sub_abc123"}
+	if err := repo.Create(ctx, o); err != nil {
+		t.Fatalf("Create: %v", err)
+	}
+	got, err := repo.GetByStripeSubscriptionID(ctx, "sub_abc123")
+	if err != nil {
+		t.Fatalf("GetByStripeSubscriptionID: %v", err)
+	}
+	if got.ID != o.ID {
+		t.Errorf("wrong org")
+	}
+	_, err = repo.GetByStripeSubscriptionID(ctx, "")
+	if err == nil {
+		t.Fatal("expected error for empty id")
+	}
+}
+
 func TestRepository_UpdateDelete_Unit(t *testing.T) {
 	db := testDB(t)
 	sqlDB, _ := db.DB()

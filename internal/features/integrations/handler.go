@@ -425,6 +425,7 @@ func (h *Handler) GCloudConnect(c *gin.Context) {
 	params.Set("scope", scope)
 	params.Set("access_type", "offline")
 	params.Set("prompt", "consent")
+	params.Set("include_granted_scopes", "true")
 	params.Set("state", state)
 	urlStr := "https://accounts.google.com/o/oauth2/v2/auth?" + params.Encode()
 	c.Redirect(http.StatusFound, urlStr)
@@ -478,6 +479,7 @@ func (h *Handler) GCloudCallback(c *gin.Context) {
 		redirectFail(h.cfg.FrontendURL, c, "failed to store token")
 		return
 	}
+	// Google may omit refresh_token on some re-authorizations; only replace stored refresh when a new one is returned.
 	encRefresh := ""
 	if tok.RefreshToken != "" {
 		encRefresh, err = Encrypt(h.cfg.EncryptionKey, tok.RefreshToken)

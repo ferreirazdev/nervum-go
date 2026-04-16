@@ -11,7 +11,9 @@ import (
 type Repository interface {
 	Create(ctx context.Context, o *Organization) error
 	GetByID(ctx context.Context, id uuid.UUID) (*Organization, error)
+	GetByStripeSubscriptionID(ctx context.Context, stripeSubscriptionID string) (*Organization, error)
 	List(ctx context.Context) ([]Organization, error)
+	ListPaged(ctx context.Context, limit, offset int) ([]Organization, int64, error)
 	Update(ctx context.Context, o *Organization) error
 	Delete(ctx context.Context, id uuid.UUID) error
 }
@@ -38,10 +40,41 @@ func (r *repository) GetByID(ctx context.Context, id uuid.UUID) (*Organization, 
 	return &o, nil
 }
 
+func (r *repository) GetByStripeSubscriptionID(ctx context.Context, stripeSubscriptionID string) (*Organization, error) {
+	if stripeSubscriptionID == "" {
+		return nil, gorm.ErrRecordNotFound
+	}
+	var o Organization
+	err := r.db.WithContext(ctx).Where("stripe_subscription_id = ?", stripeSubscriptionID).First(&o).Error
+	if err != nil {
+		return nil, err
+	}
+	return &o, nil
+}
+
 func (r *repository) List(ctx context.Context) ([]Organization, error) {
 	var list []Organization
 	err := r.db.WithContext(ctx).Find(&list).Error
 	return list, err
+}
+
+func (r *repository) ListPaged(ctx context.Context, limit, offset int) ([]Organization, int64, error) {
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	var total int64
+	if err := r.db.WithContext(ctx).Model(&Organization{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	var list []Organization
+	err := r.db.WithContext(ctx).Order("created_at DESC").Limit(limit).Offset(offset).Find(&list).Error
+	return list, total, err
 }
 
 func (r *repository) Update(ctx context.Context, o *Organization) error {

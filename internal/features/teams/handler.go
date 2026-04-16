@@ -5,8 +5,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	user "github.com/nervum/nervum-go/internal/features/users"
 	userteam "github.com/nervum/nervum-go/internal/features/user_teams"
+	user "github.com/nervum/nervum-go/internal/features/users"
 	"gorm.io/gorm"
 )
 
@@ -47,10 +47,10 @@ func (h *Handler) Register(r *gin.RouterGroup) {
 }
 
 type createTeamRequest struct {
-	OrganizationID  uuid.UUID   `json:"organization_id" binding:"required"`
-	Name            string      `json:"name" binding:"required"`
-	Icon            string      `json:"icon"`
-	EnvironmentIDs  []uuid.UUID `json:"environment_ids"`
+	OrganizationID uuid.UUID   `json:"organization_id" binding:"required"`
+	Name           string      `json:"name" binding:"required"`
+	Icon           string      `json:"icon"`
+	EnvironmentIDs []uuid.UUID `json:"environment_ids"`
 }
 
 func (h *Handler) Create(c *gin.Context) {
