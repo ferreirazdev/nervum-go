@@ -18,6 +18,7 @@ type Config struct {
 	Integrations        IntegrationsConfig
 	Stripe              StripeConfig
 	InternalAdminEmails []string // INTERNAL_ADMIN_EMAILS (comma-separated); default ferreirazdev@gmail.com when unset
+	AuthWhitelistEmails []string // AUTH_WHITELIST_EMAILS (comma-separated); defaults to internal prelaunch emails
 }
 
 // StripeConfig holds Stripe Billing API keys (Checkout, Customer Portal, webhooks).
@@ -44,7 +45,7 @@ type ServerConfig struct {
 	SessionCookieSameSite http.SameSite // from SESSION_COOKIE_SAMESITE: strict (default), lax, none — use none for SPA on another origin
 	SessionCookieSecure   bool          // from SESSION_COOKIE_SECURE (default true); set false only for local HTTP API
 	TrustedProxies        []string      // from TRUSTED_PROXIES (comma-separated CIDRs); empty means trust no proxy headers (direct RemoteAddr)
-	CORSAllowedOrigins    []string      // from CORS_ALLOWED_ORIGINS (comma-separated); defaults to localhost:5173
+	CORSAllowedOrigins    []string      // from CORS_ALLOWED_ORIGINS (comma-separated); defaults to localhost:5173 and https://app.nervum.site
 	// Service token auth for CLI/automation: when Authorization: Bearer <token> matches ServiceToken,
 	// request is treated as authenticated as ServiceUserID (UUID of an existing user in that org).
 	ServiceToken  string // NERVUM_SERVICE_TOKEN
@@ -68,7 +69,7 @@ func Load() *Config {
 	port, _ := strconv.Atoi(getEnv("PORT", "8080"))
 	dbPort, _ := strconv.Atoi(getEnv("DB_PORT", "5432"))
 
-	corsOrigins := []string{"http://localhost:5173"}
+	corsOrigins := []string{"http://localhost:5173", "https://app.nervum.site"}
 	if raw := os.Getenv("CORS_ALLOWED_ORIGINS"); raw != "" {
 		corsOrigins = strings.Split(raw, ",")
 		for i, o := range corsOrigins {
@@ -106,8 +107,21 @@ func Load() *Config {
 		internalAdmins = []string{"ferreirazdev@gmail.com"}
 	}
 
+	authWhitelistEmails := parseCommaSeparated(os.Getenv("AUTH_WHITELIST_EMAILS"))
+	for i := range authWhitelistEmails {
+		authWhitelistEmails[i] = strings.ToLower(strings.TrimSpace(authWhitelistEmails[i]))
+	}
+	if len(authWhitelistEmails) == 0 {
+		authWhitelistEmails = []string{
+			"pessoal.flavioferreira@gmail.com",
+			"ferreirazdev@gmail.com",
+			"business.flavioferreira@gmail.com",
+		}
+	}
+
 	return &Config{
 		InternalAdminEmails: internalAdmins,
+		AuthWhitelistEmails: authWhitelistEmails,
 		Stripe: StripeConfig{
 			SecretKey:       getEnv("STRIPE_SECRET_KEY", ""),
 			WebhookSecret:   getEnv("STRIPE_WEBHOOK_SECRET", ""),

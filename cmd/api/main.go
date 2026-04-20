@@ -78,7 +78,16 @@ func main() {
 
 	// Public auth routes — login and register are rate-limited (5 attempts/minute per IP).
 	authRateLimit := ratelimit.IPRateLimit(5, time.Minute)
-	auth.NewHandler(sessionRepo, userRepo, orgRepo, cfg.Server.ServiceToken, cfg.Server.ServiceUserID, cfg.Server.SessionCookieSameSite, cfg.Server.SessionCookieSecure).Register(api, authRateLimit)
+	auth.NewHandler(
+		sessionRepo,
+		userRepo,
+		orgRepo,
+		cfg.Server.ServiceToken,
+		cfg.Server.ServiceUserID,
+		cfg.Server.SessionCookieSameSite,
+		cfg.Server.SessionCookieSecure,
+		cfg.AuthWhitelistEmails,
+	).Register(api, authRateLimit)
 
 	if cfg.Stripe.SecretKey != "" {
 		stripe.Key = cfg.Stripe.SecretKey

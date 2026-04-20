@@ -3,6 +3,7 @@ package auth
 import (
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -16,6 +17,7 @@ import (
 const (
 	sessionDuration = 24 * time.Hour
 	bcryptCost      = 12
+	blockedAuthMsg  = "cadastros estão bloqueados"
 )
 
 // Handler handles auth HTTP routes: register, login, logout, and me (current user).
@@ -27,19 +29,43 @@ type Handler struct {
 	serviceUserID         string
 	sessionCookieSameSite http.SameSite
 	sessionCookieSecure   bool
+	authWhitelistEmails   map[string]struct{}
 }
 
 // NewHandler returns an auth Handler with the given session and user repositories.
 // serviceToken and serviceUserID are passed to RequireAuth for Bearer-token (CLI) support; can be empty.
 // sessionCookieSameSite should be SameSiteNoneMode when the SPA is hosted on another origin than the API.
 // sessionCookieSecure should be true in production (HTTPS); false only for local HTTP.
-func NewHandler(sessionRepo SessionRepository, userRepo user.Repository, orgRepo organization.Repository, serviceToken, serviceUserID string, sessionCookieSameSite http.SameSite, sessionCookieSecure bool) *Handler {
+func NewHandler(
+	sessionRepo SessionRepository,
+	userRepo user.Repository,
+	orgRepo organization.Repository,
+	serviceToken, serviceUserID string,
+	sessionCookieSameSite http.SameSite,
+	sessionCookieSecure bool,
+	authWhitelistEmails []string,
+) *Handler {
+	allowlist := make(map[string]struct{}, len(authWhitelistEmails))
+	for _, email := range authWhitelistEmails {
+		normalized := strings.ToLower(strings.TrimSpace(email))
+		if normalized != "" {
+			allowlist[normalized] = struct{}{}
+		}
+	}
+
 	return &Handler{
 		sessionRepo: sessionRepo, userRepo: userRepo, orgRepo: orgRepo,
 		serviceToken: serviceToken, serviceUserID: serviceUserID,
 		sessionCookieSameSite: sessionCookieSameSite,
 		sessionCookieSecure:   sessionCookieSecure,
+		authWhitelistEmails:   allowlist,
 	}
+}
+
+func (h *Handler) isAuthEmailAllowed(email string) bool {
+	normalized := strings.ToLower(strings.TrimSpace(email))
+	_, ok := h.authWhitelistEmails[normalized]
+	return ok
 }
 
 // Register mounts auth routes under /auth. sensitiveMiddleware is applied to
@@ -64,6 +90,10 @@ func (h *Handler) RegisterUser(c *gin.Context) {
 	var req registerRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if !h.isAuthEmailAllowed(req.Email) {
+		c.JSON(http.StatusForbidden, gin.H{"error": blockedAuthMsg})
 		return
 	}
 
@@ -117,6 +147,10 @@ func (h *Handler) Login(c *gin.Context) {
 	var req loginRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	if !h.isAuthEmailAllowed(req.Email) {
+		c.JSON(http.StatusForbidden, gin.H{"error": blockedAuthMsg})
 		return
 	}
 

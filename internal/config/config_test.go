@@ -17,6 +17,7 @@ func TestLoad_Unit(t *testing.T) {
 		t.Setenv("SESSION_COOKIE_SECURE", "")
 		t.Setenv("TRUSTED_PROXIES", "")
 		t.Setenv("INTERNAL_ADMIN_EMAILS", "")
+		t.Setenv("AUTH_WHITELIST_EMAILS", "")
 		cfg := Load()
 		if cfg.Server.Port != 8080 {
 			t.Errorf("Server.Port = %d, want 8080", cfg.Server.Port)
@@ -48,6 +49,12 @@ func TestLoad_Unit(t *testing.T) {
 		if len(cfg.InternalAdminEmails) != 1 || cfg.InternalAdminEmails[0] != "ferreirazdev@gmail.com" {
 			t.Errorf("InternalAdminEmails = %#v", cfg.InternalAdminEmails)
 		}
+		if len(cfg.AuthWhitelistEmails) != 3 ||
+			cfg.AuthWhitelistEmails[0] != "pessoal.flavioferreira@gmail.com" ||
+			cfg.AuthWhitelistEmails[1] != "ferreirazdev@gmail.com" ||
+			cfg.AuthWhitelistEmails[2] != "business.flavioferreira@gmail.com" {
+			t.Errorf("AuthWhitelistEmails = %#v", cfg.AuthWhitelistEmails)
+		}
 	})
 
 	t.Run("session cookie secure false", func(t *testing.T) {
@@ -64,12 +71,19 @@ func TestLoad_Unit(t *testing.T) {
 
 	t.Run("internal admin emails from env", func(t *testing.T) {
 		t.Setenv("INTERNAL_ADMIN_EMAILS", " a@b.com , C@D.com ")
+		t.Setenv("AUTH_WHITELIST_EMAILS", " user1@example.com , USER2@example.com ")
 		cfg := Load()
 		if len(cfg.InternalAdminEmails) != 2 {
 			t.Fatalf("len = %d", len(cfg.InternalAdminEmails))
 		}
 		if cfg.InternalAdminEmails[0] != "a@b.com" || cfg.InternalAdminEmails[1] != "c@d.com" {
 			t.Fatalf("got %#v", cfg.InternalAdminEmails)
+		}
+		if len(cfg.AuthWhitelistEmails) != 2 {
+			t.Fatalf("len = %d", len(cfg.AuthWhitelistEmails))
+		}
+		if cfg.AuthWhitelistEmails[0] != "user1@example.com" || cfg.AuthWhitelistEmails[1] != "user2@example.com" {
+			t.Fatalf("got %#v", cfg.AuthWhitelistEmails)
 		}
 	})
 
